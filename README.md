@@ -2,6 +2,32 @@
 
 A modern React/Next.js frontend for Paperless-ngx, built with Subframe components.
 
+
+PaperlessLink is a modern, open-source frontend application designed to provide a React/Next.js-based user interface for Paperless-ngx, a document management system. The project leverages Subframe UI components and is built with TypeScript, offering developers a clean, component-driven architecture. It includes pre-configured environment setup, API client services ported from Angular, and supports authentication including SSO through Remote User Auth.
+
+
+### Main Function Points
+- Modern React/Next.js frontend for Paperless-ngx document management system
+- Authentication system with username/password and SSO support (Remote User Auth)
+- RESTful API integration with configurable backend URLs
+- Component-based UI architecture using Subframe design system
+- Development environment with hot-reload capabilities
+- Comprehensive configuration and documentation support
+- API client services previously migrated from Angular implementation
+
+### Technology Stack
+- **Frontend Framework**: React, Next.js (App Router)
+- **Language**: TypeScript (98.8% of codebase)
+- **UI Components**: Subframe
+- **Package Manager**: pnpm
+- **Development Tools**: ESLint, PostCSS
+- **Build Tools**: Next.js build system
+
+### License
+No license information is provided in the repository documentation.
+
+
+
 ## Getting Started
 
 ### 1. Install Dependencies
