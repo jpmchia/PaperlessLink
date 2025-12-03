@@ -9,10 +9,12 @@
  * Sidebar with sections — https://app.subframe.com/af1371ce7f26/library?component=Sidebar+with+sections_f4047c8b-cfb4-4761-b9cf-fbcae8a9b9b5
  */
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { FeatherBarChart2 } from "@subframe/core";
 import { FeatherChevronDown } from "@subframe/core";
+import { FeatherChevronLeft } from "@subframe/core";
+import { FeatherChevronRight } from "@subframe/core";
 import { FeatherColumns } from "@subframe/core";
 import { FeatherEye } from "@subframe/core";
 import { FeatherFileText } from "@subframe/core";
@@ -48,6 +50,23 @@ const DefaultPageLayoutRoot = React.forwardRef<
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useAuth();
+  
+  // Sidebar minimized state - persist in localStorage
+  const [isMinimized, setIsMinimized] = useState(false);
+  
+  useEffect(() => {
+    // Load minimized state from localStorage on mount
+    const savedState = localStorage.getItem('sidebarMinimized');
+    if (savedState !== null) {
+      setIsMinimized(savedState === 'true');
+    }
+  }, []);
+  
+  const toggleSidebar = () => {
+    const newState = !isMinimized;
+    setIsMinimized(newState);
+    localStorage.setItem('sidebarMinimized', String(newState));
+  };
 
   const handleLogout = () => {
     logout();
@@ -62,56 +81,80 @@ const DefaultPageLayoutRoot = React.forwardRef<
       ref={ref}
       {...otherProps}
     >
-      <SidebarWithSections
-        className="mobile:hidden"
-        header={
-          <span className="text-heading-2 font-heading-2 text-default-font">
-            Paperless-Link
-          </span>
-        }
+      <div className="relative">
+        <SidebarWithSections
+          className={SubframeUtils.twClassNames(
+            "mobile:hidden transition-all duration-300 ease-in-out",
+            isMinimized ? "w-16" : "w-60"
+          )}
+          header={
+            <div className={SubframeUtils.twClassNames(
+              "flex items-center w-full",
+              isMinimized ? "justify-center" : "justify-between"
+            )}>
+              {!isMinimized && (
+                <span className="text-heading-2 font-heading-2 text-default-font">
+                  Paperless-Link
+                </span>
+              )}
+              <IconButton
+                size="small"
+                icon={isMinimized ? <FeatherChevronRight /> : <FeatherChevronLeft />}
+                onClick={toggleSidebar}
+                className={isMinimized ? "" : "ml-auto"}
+              />
+            </div>
+          }
         footer={
           <>
-            <div className="flex grow shrink-0 basis-0 items-start gap-2">
+            <div className={SubframeUtils.twClassNames(
+              "flex grow shrink-0 basis-0 items-start gap-2",
+              isMinimized && "justify-center"
+            )}>
               <Avatar>
                 U
               </Avatar>
-              <div className="flex flex-col items-start">
-                <span className="text-caption-bold font-caption-bold text-default-font">
-                  User
-                </span>
-                <span className="text-caption font-caption text-subtext-color">
-                  Paperless-NGX
-                </span>
-              </div>
+              {!isMinimized && (
+                <div className="flex flex-col items-start">
+                  <span className="text-caption-bold font-caption-bold text-default-font">
+                    User
+                  </span>
+                  <span className="text-caption font-caption text-subtext-color">
+                    Paperless-NGX
+                  </span>
+                </div>
+              )}
             </div>
-            <SubframeCore.DropdownMenu.Root>
-              <SubframeCore.DropdownMenu.Trigger asChild={true}>
-                <IconButton size="small" icon={<FeatherMoreHorizontal />} />
-              </SubframeCore.DropdownMenu.Trigger>
-              <SubframeCore.DropdownMenu.Portal>
-                <SubframeCore.DropdownMenu.Content
-                  side="bottom"
-                  align="start"
-                  sideOffset={4}
-                  asChild={true}
-                >
-                  <DropdownMenu>
-                    <DropdownMenu.DropdownItem 
-                      icon={<FeatherSettings />}
-                      onClick={() => router.push("/settings")}
-                    >
-                      Settings
-                    </DropdownMenu.DropdownItem>
-                    <DropdownMenu.DropdownItem 
-                      icon={<FeatherLogOut />}
-                      onClick={handleLogout}
-                    >
-                      Log out
-                    </DropdownMenu.DropdownItem>
-                  </DropdownMenu>
-                </SubframeCore.DropdownMenu.Content>
-              </SubframeCore.DropdownMenu.Portal>
-            </SubframeCore.DropdownMenu.Root>
+            {!isMinimized && (
+              <SubframeCore.DropdownMenu.Root>
+                <SubframeCore.DropdownMenu.Trigger asChild={true}>
+                  <IconButton size="small" icon={<FeatherMoreHorizontal />} />
+                </SubframeCore.DropdownMenu.Trigger>
+                <SubframeCore.DropdownMenu.Portal>
+                  <SubframeCore.DropdownMenu.Content
+                    side="bottom"
+                    align="start"
+                    sideOffset={4}
+                    asChild={true}
+                  >
+                    <DropdownMenu>
+                      <DropdownMenu.DropdownItem 
+                        icon={<FeatherSettings />}
+                        onClick={() => router.push("/settings")}
+                      >
+                        Settings
+                      </DropdownMenu.DropdownItem>
+                      <DropdownMenu.DropdownItem 
+                        icon={<FeatherLogOut />}
+                        onClick={handleLogout}
+                      >
+                        Log out
+                      </DropdownMenu.DropdownItem>
+                    </DropdownMenu>
+                  </SubframeCore.DropdownMenu.Content>
+                </SubframeCore.DropdownMenu.Portal>
+              </SubframeCore.DropdownMenu.Root>
+            )}
           </>
         }
       >
@@ -119,58 +162,99 @@ const DefaultPageLayoutRoot = React.forwardRef<
           icon={<FeatherGauge />} 
           selected={pathname === "/dashboard"}
           onClick={() => router.push("/dashboard")}
+          className={isMinimized ? "justify-center px-2" : ""}
         >
-          Dashboard
+          {!isMinimized && "Dashboard"}
         </SidebarWithSections.NavItem>
         <SidebarWithSections.NavItem 
           icon={<FeatherFileText />} 
           selected={pathname === "/documents" || pathname?.startsWith("/documents/")}
           onClick={() => router.push("/documents")}
+          className={isMinimized ? "justify-center px-2" : ""}
         >
-          Documents
+          {!isMinimized && "Documents"}
         </SidebarWithSections.NavItem>
-        <SidebarWithSections.NavSection label="Manage">
-          <SidebarWithSections.NavItem 
-            icon={<FeatherUsers />}
-            onClick={() => router.push("/correspondents")}
-          >
-            Correspondents
-          </SidebarWithSections.NavItem>
-          <SidebarWithSections.NavItem 
-            icon={<FeatherTag />}
-            onClick={() => router.push("/tags")}
-          >
-            Tags
-          </SidebarWithSections.NavItem>
-          <SidebarWithSections.NavItem 
-            icon={<FeatherFileText />}
-            onClick={() => router.push("/document-types")}
-          >
-            Document Types
-          </SidebarWithSections.NavItem>
-          <SidebarWithSections.NavItem 
-            icon={<FeatherColumns />}
-            onClick={() => router.push("/custom-fields")}
-          >
-            Custom Fields
-          </SidebarWithSections.NavItem>
-          <SidebarWithSections.NavItem 
-            icon={<FeatherEye />}
-            onClick={() => router.push("/saved-views")}
-          >
-            Saved Views
-          </SidebarWithSections.NavItem>
-        </SidebarWithSections.NavSection>
-        <SidebarWithSections.NavSection label="Settings">
-          <SidebarWithSections.NavItem 
-            icon={<FeatherSettings />}
-            selected={pathname === "/settings"}
-            onClick={() => router.push("/settings")}
-          >
-            Settings
-          </SidebarWithSections.NavItem>
-        </SidebarWithSections.NavSection>
+        {!isMinimized ? (
+          <>
+            <SidebarWithSections.NavSection label="Manage">
+              <SidebarWithSections.NavItem 
+                icon={<FeatherUsers />}
+                onClick={() => router.push("/correspondents")}
+              >
+                Correspondents
+              </SidebarWithSections.NavItem>
+              <SidebarWithSections.NavItem 
+                icon={<FeatherTag />}
+                onClick={() => router.push("/tags")}
+              >
+                Tags
+              </SidebarWithSections.NavItem>
+              <SidebarWithSections.NavItem 
+                icon={<FeatherFileText />}
+                onClick={() => router.push("/document-types")}
+              >
+                Document Types
+              </SidebarWithSections.NavItem>
+              <SidebarWithSections.NavItem 
+                icon={<FeatherColumns />}
+                onClick={() => router.push("/custom-fields")}
+              >
+                Custom Fields
+              </SidebarWithSections.NavItem>
+              <SidebarWithSections.NavItem 
+                icon={<FeatherEye />}
+                onClick={() => router.push("/saved-views")}
+              >
+                Saved Views
+              </SidebarWithSections.NavItem>
+            </SidebarWithSections.NavSection>
+            <SidebarWithSections.NavSection label="Settings">
+              <SidebarWithSections.NavItem 
+                icon={<FeatherSettings />}
+                selected={pathname === "/settings"}
+                onClick={() => router.push("/settings")}
+              >
+                Settings
+              </SidebarWithSections.NavItem>
+            </SidebarWithSections.NavSection>
+          </>
+        ) : (
+          <div className="flex w-full flex-col items-start gap-1 pt-6">
+            <SidebarWithSections.NavItem 
+              icon={<FeatherUsers />}
+              onClick={() => router.push("/correspondents")}
+              className="justify-center px-2"
+            />
+            <SidebarWithSections.NavItem 
+              icon={<FeatherTag />}
+              onClick={() => router.push("/tags")}
+              className="justify-center px-2"
+            />
+            <SidebarWithSections.NavItem 
+              icon={<FeatherFileText />}
+              onClick={() => router.push("/document-types")}
+              className="justify-center px-2"
+            />
+            <SidebarWithSections.NavItem 
+              icon={<FeatherColumns />}
+              onClick={() => router.push("/custom-fields")}
+              className="justify-center px-2"
+            />
+            <SidebarWithSections.NavItem 
+              icon={<FeatherEye />}
+              onClick={() => router.push("/saved-views")}
+              className="justify-center px-2"
+            />
+            <SidebarWithSections.NavItem 
+              icon={<FeatherSettings />}
+              selected={pathname === "/settings"}
+              onClick={() => router.push("/settings")}
+              className="justify-center px-2"
+            />
+          </div>
+        )}
       </SidebarWithSections>
+      </div>
       {children ? (
         <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 self-stretch overflow-y-auto bg-default-background">
           {children}

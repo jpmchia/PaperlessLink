@@ -124,24 +124,24 @@ const SidebarWithSectionsRoot = React.forwardRef<
   return (
     <nav
       className={SubframeUtils.twClassNames(
-        "flex h-full w-60 flex-col items-start border-r border-solid border-neutral-border bg-default-background",
+        "flex h-screen w-60 flex-col items-start border-r border-solid border-neutral-border bg-default-background",
         className
       )}
       ref={ref}
       {...otherProps}
     >
       {header ? (
-        <div className="flex w-full flex-col items-start gap-2 px-6 py-6">
+        <div className="flex w-full flex-none flex-col items-start gap-2 px-6 py-6">
           {header}
         </div>
       ) : null}
       {children ? (
-        <div className="flex w-full grow shrink-0 basis-0 flex-col items-start px-4 py-4 overflow-auto">
+        <div className="flex w-full flex-1 flex-col items-start px-4 py-4 overflow-auto min-h-0">
           {children}
         </div>
       ) : null}
       {footer ? (
-        <div className="flex w-full items-center gap-4 border-t border-solid border-neutral-border px-6 py-6">
+        <div className="flex w-full flex-none items-center gap-4 border-t border-solid border-neutral-border px-6 py-6">
           {footer}
         </div>
       ) : null}
