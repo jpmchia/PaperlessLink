@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/ui/components/Button";
 import { LinkButton } from "@/ui/components/LinkButton";
 import { TextField } from "@/ui/components/TextField";
@@ -11,8 +11,15 @@ export default function SignInPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
-  const { login, loading } = useAuth();
+  const { login, loading, isAuthenticated } = useAuth();
   const router = useRouter();
+
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (isAuthenticated()) {
+      router.push("/dashboard");
+    }
+  }, [isAuthenticated, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,22 +46,22 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="flex w-full items-start h-screen">
+    <div className="flex w-full items-start h-screen overflow-hidden">
       <div className="flex grow shrink-0 basis-0 flex-col items-start self-stretch">
         <img
-          className="w-full grow shrink-0 basis-0 object-cover"
+          className="w-full grow shrink-0 basis-0 object-cover h-full"
           src="https://images.unsplash.com/photo-1497366216548-37526070297c?w=1600&h=1200&fit=crop"
           alt="Sign in background"
         />
       </div>
-      <div className="flex max-w-[448px] grow shrink-0 basis-0 flex-col items-center justify-center gap-8 self-stretch bg-default-background px-12 py-12">
+      <div className="flex max-w-[25vw] min-w-[320px] grow shrink-0 basis-0 flex-col items-center justify-center gap-12 self-stretch bg-default-background px-[4vw] py-12">
         <div className="flex w-full flex-col items-start gap-8">
           <div className="flex w-full flex-col items-start gap-2">
             <span className="w-full text-heading-1 font-heading-1 text-default-font">
-              Welcome back
+              Paperless-Link
             </span>
             <span className="w-full text-body font-body text-subtext-color">
-              Sign in to your account to continue
+              Sign in to your Paperless-NGX account to continue
             </span>
           </div>
 
@@ -71,7 +78,7 @@ export default function SignInPage() {
             className="flex w-full flex-col items-start gap-6"
           >
             <TextField
-              className="h-auto w-full flex-none"
+              className="h-auto w-full max-w-[20rem] flex-none"
               label="Username"
               helpText=""
             >
@@ -87,7 +94,7 @@ export default function SignInPage() {
               />
             </TextField>
             <TextField
-              className="h-auto w-full flex-none"
+              className="h-auto w-full max-w-[20rem] flex-none"
               label="Password"
               helpText=""
             >
@@ -103,7 +110,7 @@ export default function SignInPage() {
               />
             </TextField>
             <Button
-              className="h-10 w-full flex-none"
+              className="h-10 w-full max-w-[20rem] flex-none"
               size="large"
               type="submit"
               disabled={loading}
@@ -112,7 +119,7 @@ export default function SignInPage() {
             </Button>
           </form>
 
-          <div className="flex w-full items-start justify-center gap-1 flex-wrap">
+          {/* <div className="flex w-full items-start justify-center gap-1 flex-wrap">
             <span className="text-body font-body text-default-font">
               Don&apos;t have an account?
             </span>
@@ -126,7 +133,7 @@ export default function SignInPage() {
             >
               Sign up
             </LinkButton>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>

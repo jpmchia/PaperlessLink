@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Badge } from "@/ui/components/Badge";
 import { Button } from "@/ui/components/Button";
 import { DropdownMenu } from "@/ui/components/DropdownMenu";
+import { FilterMenu } from "@/ui/components/FilterMenu";
 import { IconButton } from "@/ui/components/IconButton";
 import { PieChart } from "@/ui/components/PieChart";
 import { Table } from "@/ui/components/Table";
@@ -27,7 +28,7 @@ import { useDocuments, useTags, useCorrespondents, useDocumentTypes, useCustomFi
 import { Document } from "@/app/data/document";
 import { FilterRule } from "@/app/data/filter-rule";
 import { FILTER_DOCUMENT_TYPE, FILTER_CORRESPONDENT, FILTER_HAS_TAGS_ALL } from "@/app/data/filter-rule-type";
-import { CustomField } from "@/app/data/custom-field";
+import { CustomField, CustomFieldDataType } from "@/app/data/custom-field";
 
 type DistributionType = "type" | "correspondent" | "tags" | "status" | "prepared_by";
 
@@ -38,8 +39,29 @@ export function DashboardWithAnalytics() {
   const { listAll: listAllDocumentTypes } = useDocumentTypes();
   const { listAll: listAllCustomFields } = useCustomFields();
 
+  // Suppress React defaultProps deprecation warning from third-party charting library (@subframe/core)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+      const originalWarn = console.warn;
+      console.warn = (...args: any[]) => {
+        if (
+          typeof args[0] === 'string' && 
+          (args[0].includes('defaultProps') || args[0].includes('Tooltip: Support for defaultProps'))
+        ) {
+          return; // Suppress this specific warning
+        }
+        originalWarn.apply(console, args);
+      };
+      
+      return () => {
+        console.warn = originalWarn;
+      };
+    }
+  }, []);
+
   // State
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [allFilteredDocuments, setAllFilteredDocuments] = useState<Document[]>([]); // All documents matching filters for distribution calculations
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(10);
@@ -50,13 +72,20 @@ export function DashboardWithAnalytics() {
   const [selectedDocumentTypes, setSelectedDocumentTypes] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<number[]>([]);
   const [selectedCorrespondent, setSelectedCorrespondent] = useState<number | null>(null);
-  const [documentsPanelHeight, setDocumentsPanelHeight] = useState<number>(() => {
+  const [documentsPanelHeight, setDocumentsPanelHeight] = useState<number>(600); // SSR-safe default
+  
+  // Initialize height from localStorage or calculate 60vh on client mount
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('documentsPanelHeight');
-      return saved ? parseInt(saved, 10) : 400;
+      if (saved) {
+        setDocumentsPanelHeight(parseInt(saved, 10));
+      } else {
+        // Default to 60vh converted to pixels
+        setDocumentsPanelHeight(Math.round(window.innerHeight * 0.6));
+      }
     }
-    return 400;
-  });
+  }, []);
   
   // Filter options
   const [documentTypes, setDocumentTypes] = useState<any[]>([]);
@@ -64,6 +93,7 @@ export function DashboardWithAnalytics() {
   const [correspondents, setCorrespondents] = useState<any[]>([]);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [loading, setLoading] = useState(true);
+  const [distributionsLoading, setDistributionsLoading] = useState(false);
 
   // Find Status and Prepared By custom fields
   const statusField = useMemo(() => 
@@ -128,7 +158,31 @@ export function DashboardWithAnalytics() {
     return rules;
   }, [selectedDocumentTypes, selectedCorrespondent, selectedTags]);
 
-  // Fetch documents
+  // Fetch all documents matching filters for distribution calculations (without search query)
+  useEffect(() => {
+    const fetchAllFilteredDocuments = async () => {
+      setDistributionsLoading(true);
+      try {
+        // Fetch all documents matching filters (without search query) for distribution calculations
+        // Use a large pageSize to get all matching documents
+        const result = await listFiltered({
+          page: 1,
+          pageSize: 10000, // Large page size to get all documents
+          filterRules: filterRules.length > 0 ? filterRules : undefined,
+          extraParams: { truncate_content: true }, // Don't need full content for distribution calculations
+        });
+        setAllFilteredDocuments(result.results);
+      } catch (error) {
+        console.error("Failed to fetch all filtered documents:", error);
+        setAllFilteredDocuments([]);
+      } finally {
+        setDistributionsLoading(false);
+      }
+    };
+    fetchAllFilteredDocuments();
+  }, [filterRules, listFiltered]); // Only depend on filterRules, not searchQuery
+
+  // Fetch paginated documents for table display
   useEffect(() => {
     const fetchDocuments = async () => {
       setLoading(true);
@@ -154,10 +208,10 @@ export function DashboardWithAnalytics() {
     fetchDocuments();
   }, [currentPage, filterRules, searchQuery, listFiltered, pageSize]);
 
-  // Calculate statistics for pie charts
+  // Calculate statistics for pie charts based on ALL filtered documents (not just paginated ones)
   const typeDistribution = useMemo(() => {
     const counts: Record<number, number> = {};
-    documents.forEach(doc => {
+    allFilteredDocuments.forEach(doc => {
       if (doc.document_type) {
         counts[doc.document_type] = (counts[doc.document_type] || 0) + 1;
       }
@@ -169,11 +223,11 @@ export function DashboardWithAnalytics() {
         value: count,
       };
     });
-  }, [documents, documentTypes]);
+  }, [allFilteredDocuments, documentTypes]);
 
   const correspondentDistribution = useMemo(() => {
     const counts: Record<number, number> = {};
-    documents.forEach(doc => {
+    allFilteredDocuments.forEach(doc => {
       if (doc.correspondent) {
         counts[doc.correspondent] = (counts[doc.correspondent] || 0) + 1;
       }
@@ -185,11 +239,11 @@ export function DashboardWithAnalytics() {
         value: count,
       };
     });
-  }, [documents, correspondents]);
+  }, [allFilteredDocuments, correspondents]);
 
   const tagDistribution = useMemo(() => {
     const counts: Record<number, number> = {};
-    documents.forEach(doc => {
+    allFilteredDocuments.forEach(doc => {
       if (doc.tags && doc.tags.length > 0) {
         doc.tags.forEach(tagId => {
           counts[tagId] = (counts[tagId] || 0) + 1;
@@ -205,18 +259,34 @@ export function DashboardWithAnalytics() {
         };
       })
       .sort((a, b) => b.value - a.value); // Sort by count descending
-  }, [documents, tags]);
+  }, [allFilteredDocuments, tags]);
+
+  // Helper function to get the display value for a custom field
+  const getCustomFieldDisplayValue = (field: CustomField, valueId: string | number | null | undefined): string => {
+    if (valueId === null || valueId === undefined) return '';
+    
+    // For SELECT type fields, look up the label from select_options
+    if (field.data_type === CustomFieldDataType.Select && field.extra_data?.select_options) {
+      const option = field.extra_data.select_options.find(opt => opt.id === String(valueId));
+      return option?.label || String(valueId);
+    }
+    
+    // For other field types, return the value as-is
+    return String(valueId);
+  };
 
   // Custom field distributions
   const statusDistribution = useMemo(() => {
     if (!statusField) return [];
     const counts: Record<string, number> = {};
-    documents.forEach(doc => {
+    allFilteredDocuments.forEach(doc => {
       if (doc.custom_fields) {
         const statusInstance = doc.custom_fields.find(cf => cf.field === statusField.id);
         if (statusInstance && statusInstance.value !== null && statusInstance.value !== undefined) {
-          const value = String(statusInstance.value);
-          counts[value] = (counts[value] || 0) + 1;
+          const displayValue = getCustomFieldDisplayValue(statusField, statusInstance.value);
+          if (displayValue) {
+            counts[displayValue] = (counts[displayValue] || 0) + 1;
+          }
         }
       }
     });
@@ -226,17 +296,19 @@ export function DashboardWithAnalytics() {
         value: count,
       }))
       .sort((a, b) => b.value - a.value);
-  }, [documents, statusField]);
+  }, [allFilteredDocuments, statusField]);
 
   const preparedByDistribution = useMemo(() => {
     if (!preparedByField) return [];
     const counts: Record<string, number> = {};
-    documents.forEach(doc => {
+    allFilteredDocuments.forEach(doc => {
       if (doc.custom_fields) {
         const preparedByInstance = doc.custom_fields.find(cf => cf.field === preparedByField.id);
         if (preparedByInstance && preparedByInstance.value !== null && preparedByInstance.value !== undefined) {
-          const value = String(preparedByInstance.value);
-          counts[value] = (counts[value] || 0) + 1;
+          const displayValue = getCustomFieldDisplayValue(preparedByField, preparedByInstance.value);
+          if (displayValue) {
+            counts[displayValue] = (counts[displayValue] || 0) + 1;
+          }
         }
       }
     });
@@ -246,7 +318,7 @@ export function DashboardWithAnalytics() {
         value: count,
       }))
       .sort((a, b) => b.value - a.value);
-  }, [documents, preparedByField]);
+  }, [allFilteredDocuments, preparedByField]);
 
   // Get distribution data based on type, limiting to top 5 for pie charts
   const getDistributionData = (type: DistributionType) => {
@@ -302,11 +374,44 @@ export function DashboardWithAnalytics() {
     }
   };
 
+  // Calculate counts for filter options based on allFilteredDocuments
+  const documentTypeCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    allFilteredDocuments.forEach(doc => {
+      if (doc.document_type) {
+        counts[doc.document_type] = (counts[doc.document_type] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [allFilteredDocuments]);
+
+  const tagCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    allFilteredDocuments.forEach(doc => {
+      if (doc.tags && doc.tags.length > 0) {
+        doc.tags.forEach(tagId => {
+          counts[tagId] = (counts[tagId] || 0) + 1;
+        });
+      }
+    });
+    return counts;
+  }, [allFilteredDocuments]);
+
+  const correspondentCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    allFilteredDocuments.forEach(doc => {
+      if (doc.correspondent) {
+        counts[doc.correspondent] = (counts[doc.correspondent] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [allFilteredDocuments]);
+
   // Format date for display
   const formatDate = (date: Date | string | undefined): string => {
     if (!date) return "";
     const d = typeof date === "string" ? new Date(date) : date;
-    return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+    return d.toLocaleDateString("en-GB", { year: "numeric", month: "short", day: "numeric" });
   };
 
   // Get document type name
@@ -371,7 +476,7 @@ export function DashboardWithAnalytics() {
       <div className="flex w-full h-full flex-col items-start gap-4 bg-default-background px-6 py-4">
           <div className="flex w-full flex-col items-start gap-1 flex-shrink-0">
             <span className="text-heading-1 font-heading-1 text-default-font">
-              Document Analytics
+              Paperless-Link
             </span>
             <span className="text-body font-body text-subtext-color">
               View distribution of documents by various categories and filter to
@@ -387,7 +492,7 @@ export function DashboardWithAnalytics() {
               const setChartType = chartIndex === 0 ? setChart1Type : chartIndex === 1 ? setChart2Type : setChart3Type;
               
               return (
-                <div key={chartIndex} className="flex flex-1 min-w-0 flex-col items-start gap-3 rounded-md border border-solid border-neutral-border bg-default-background px-4 py-4 shadow-sm h-full overflow-hidden relative">
+                <div key={chartIndex} className="flex flex-1 min-w-0 flex-col items-start gap-3 rounded-md border border-solid border-neutral-border px-4 py-4 shadow-sm h-full overflow-hidden relative">
                   <div className="flex w-full items-center justify-between flex-shrink-0">
                     <span className="text-heading-3 font-heading-3 text-default-font">
                       Documents by {getDistributionLabel(chartType).replace(/^By /, '')} ({distributionData.reduce((sum, item) => sum + item.value, 0)} documents)
@@ -462,7 +567,7 @@ export function DashboardWithAnalytics() {
                           />
                         </div>
                       </div>
-                      <div className="flex w-full flex-col items-start gap-2 flex-shrink-0 overflow-y-auto relative z-10" style={{ maxHeight: '120px' }}>
+                      <div className="flex w-full flex-col items-start gap-2 flex-shrink-0 overflow-y-auto relative z-1" style={{ maxHeight: '10rem' }}>
                         {distributionData.map((item, idx) => {
                           const colors = ["#3b82f6ff", "#8b5cf6ff", "#06b6d4ff", "#ec4899ff"];
                           return (
@@ -484,7 +589,7 @@ export function DashboardWithAnalytics() {
                   ) : (
                     <div className="flex w-full flex-1 items-center justify-center min-h-0">
                       <span className="text-body font-body text-subtext-color">
-                        {loading ? "Loading..." : chartType === "status" && !statusField ? "Status field not found" : chartType === "prepared_by" && !preparedByField ? "Prepared By field not found" : "No data"}
+                        {distributionsLoading ? "Loading..." : loading ? "Loading..." : chartType === "status" && !statusField ? "Status field not found" : chartType === "prepared_by" && !preparedByField ? "Prepared By field not found" : "No data"}
                       </span>
                     </div>
                   )}
@@ -500,95 +605,182 @@ export function DashboardWithAnalytics() {
                 Filters
               </span>
               <FeatherFilter className="text-body font-body text-subtext-color" />
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-body-bold font-body-bold text-default-font">
-                  Document Type:
-                </span>
-                <ToggleGroup
-                  value={selectedDocumentTypes.join(",")}
-                  onValueChange={(value: string) => {
-                    setSelectedDocumentTypes(value ? value.split(",") : []);
-                  }}
-                >
-                  {documentTypes.slice(0, 4).map((type) => (
-                    <ToggleGroup.Item key={type.id} icon={null} value={type.id.toString()}>
-                      {type.name}
-                    </ToggleGroup.Item>
-                  ))}
-                </ToggleGroup>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-body-bold font-body-bold text-default-font">
-                  Tags:
-                </span>
-                {tags.slice(0, 4).map((tag) => (
-                  <Badge
-                    key={tag.id}
-                    variant={selectedTags.includes(tag.id) ? "brand" : "neutral"}
-                    onClick={() => {
-                      setSelectedTags(prev =>
-                        prev.includes(tag.id)
-                          ? prev.filter(id => id !== tag.id)
-                          : [...prev, tag.id]
-                      );
-                    }}
+              
+              {/* Document Type Filter */}
+              <SubframeCore.DropdownMenu.Root>
+                <SubframeCore.DropdownMenu.Trigger asChild={true}>
+                  <Button
+                    variant={selectedDocumentTypes.length > 0 ? "brand-primary" : "neutral-secondary"}
+                    size="small"
+                    iconRight={<FeatherChevronDown />}
                   >
-                    {tag.name}
-                  </Badge>
-                ))}
-                <Button
-                  variant="neutral-tertiary"
-                  size="small"
-                  icon={<FeatherPlus />}
-                  onClick={() => {}}
-                >
-                  Add Tag
-                </Button>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-body-bold font-body-bold text-default-font">
-                  Correspondent:
-                </span>
-                <SubframeCore.DropdownMenu.Root>
-                  <SubframeCore.DropdownMenu.Trigger asChild={true}>
-                    <Button
-                      variant="neutral-secondary"
-                      size="small"
-                      iconRight={<FeatherChevronDown />}
-                    >
-                      {selectedCorrespondent
-                        ? correspondents.find(c => c.id === selectedCorrespondent)?.name || "Select Correspondent"
-                        : "Select Correspondent"}
-                    </Button>
-                  </SubframeCore.DropdownMenu.Trigger>
-                  <SubframeCore.DropdownMenu.Portal>
-                    <SubframeCore.DropdownMenu.Content
-                      side="bottom"
-                      align="start"
-                      sideOffset={4}
-                      asChild={true}
-                    >
-                      <DropdownMenu>
-                        <DropdownMenu.DropdownItem
-                          icon={null}
-                          onClick={() => setSelectedCorrespondent(null)}
-                        >
+                    Document Type{selectedDocumentTypes.length > 0 ? ` (${selectedDocumentTypes.length})` : ""}
+                  </Button>
+                </SubframeCore.DropdownMenu.Trigger>
+                <SubframeCore.DropdownMenu.Portal>
+                  <SubframeCore.DropdownMenu.Content
+                    side="bottom"
+                    align="start"
+                    sideOffset={4}
+                    asChild={true}
+                  >
+                    <FilterMenu>
+                      {documentTypes
+                        .sort((a, b) => {
+                          const aChecked = selectedDocumentTypes.includes(a.id.toString());
+                          const bChecked = selectedDocumentTypes.includes(b.id.toString());
+                          if (aChecked === bChecked) return 0;
+                          return aChecked ? -1 : 1;
+                        })
+                        .map((type) => {
+                          const isChecked = selectedDocumentTypes.includes(type.id.toString());
+                          const count = documentTypeCounts[type.id] || 0;
+                          return (
+                            <FilterMenu.FilterMenuItem
+                              key={type.id}
+                              checked={isChecked}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedDocumentTypes(prev => [...prev, type.id.toString()]);
+                                } else {
+                                  setSelectedDocumentTypes(prev => prev.filter(id => id !== type.id.toString()));
+                                }
+                              }}
+                              count={count}
+                            >
+                              <span className="text-body-bold font-body-bold text-default-font">
+                                {type.name}
+                              </span>
+                            </FilterMenu.FilterMenuItem>
+                          );
+                        })}
+                    </FilterMenu>
+                  </SubframeCore.DropdownMenu.Content>
+                </SubframeCore.DropdownMenu.Portal>
+              </SubframeCore.DropdownMenu.Root>
+
+              {/* Tags Filter */}
+              <SubframeCore.DropdownMenu.Root>
+                <SubframeCore.DropdownMenu.Trigger asChild={true}>
+                  <Button
+                    variant={selectedTags.length > 0 ? "brand-primary" : "neutral-secondary"}
+                    size="small"
+                    iconRight={<FeatherChevronDown />}
+                  >
+                    Tags{selectedTags.length > 0 ? ` (${selectedTags.length})` : ""}
+                  </Button>
+                </SubframeCore.DropdownMenu.Trigger>
+                <SubframeCore.DropdownMenu.Portal>
+                  <SubframeCore.DropdownMenu.Content
+                    side="bottom"
+                    align="start"
+                    sideOffset={4}
+                    asChild={true}
+                  >
+                    <FilterMenu>
+                      {tags
+                        .sort((a, b) => {
+                          const aChecked = selectedTags.includes(a.id);
+                          const bChecked = selectedTags.includes(b.id);
+                          if (aChecked === bChecked) return 0;
+                          return aChecked ? -1 : 1;
+                        })
+                        .map((tag) => {
+                          const isChecked = selectedTags.includes(tag.id);
+                          const count = tagCounts[tag.id] || 0;
+                          return (
+                            <FilterMenu.FilterMenuItem
+                              key={tag.id}
+                              checked={isChecked}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedTags(prev => [...prev, tag.id]);
+                                } else {
+                                  setSelectedTags(prev => prev.filter(id => id !== tag.id));
+                                }
+                              }}
+                              count={count}
+                            >
+                              <span className="text-body-bold font-body-bold text-default-font">
+                                {tag.name}
+                              </span>
+                            </FilterMenu.FilterMenuItem>
+                          );
+                        })}
+                    </FilterMenu>
+                  </SubframeCore.DropdownMenu.Content>
+                </SubframeCore.DropdownMenu.Portal>
+              </SubframeCore.DropdownMenu.Root>
+
+              {/* Correspondent Filter */}
+              <SubframeCore.DropdownMenu.Root>
+                <SubframeCore.DropdownMenu.Trigger asChild={true}>
+                  <Button
+                    variant={selectedCorrespondent !== null ? "brand-primary" : "neutral-secondary"}
+                    size="small"
+                    iconRight={<FeatherChevronDown />}
+                  >
+                    {selectedCorrespondent
+                      ? correspondents.find(c => c.id === selectedCorrespondent)?.name || "Correspondent"
+                      : "Correspondent"}
+                  </Button>
+                </SubframeCore.DropdownMenu.Trigger>
+                <SubframeCore.DropdownMenu.Portal>
+                  <SubframeCore.DropdownMenu.Content
+                    side="bottom"
+                    align="start"
+                    sideOffset={4}
+                    asChild={true}
+                  >
+                    <FilterMenu>
+                      <FilterMenu.FilterMenuItem
+                        checked={selectedCorrespondent === null}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedCorrespondent(null);
+                          }
+                        }}
+                        count={allFilteredDocuments.length}
+                      >
+                        <span className="text-body-bold font-body-bold text-default-font">
                           None
-                        </DropdownMenu.DropdownItem>
-                        {correspondents.map((corr) => (
-                          <DropdownMenu.DropdownItem
-                            key={corr.id}
-                            icon={null}
-                            onClick={() => setSelectedCorrespondent(corr.id)}
-                          >
-                            {corr.name}
-                          </DropdownMenu.DropdownItem>
-                        ))}
-                      </DropdownMenu>
-                    </SubframeCore.DropdownMenu.Content>
-                  </SubframeCore.DropdownMenu.Portal>
-                </SubframeCore.DropdownMenu.Root>
-              </div>
+                        </span>
+                      </FilterMenu.FilterMenuItem>
+                      <FilterMenu.FilterDivider />
+                      {correspondents
+                        .sort((a, b) => {
+                          const aChecked = selectedCorrespondent === a.id;
+                          const bChecked = selectedCorrespondent === b.id;
+                          if (aChecked === bChecked) return 0;
+                          return aChecked ? -1 : 1;
+                        })
+                        .map((corr) => {
+                          const isChecked = selectedCorrespondent === corr.id;
+                          const count = correspondentCounts[corr.id] || 0;
+                          return (
+                            <FilterMenu.FilterMenuItem
+                              key={corr.id}
+                              checked={isChecked}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedCorrespondent(corr.id);
+                                } else {
+                                  setSelectedCorrespondent(null);
+                                }
+                              }}
+                              count={count}
+                            >
+                              <span className="text-body-bold font-body-bold text-default-font">
+                                {corr.name}
+                              </span>
+                            </FilterMenu.FilterMenuItem>
+                          );
+                        })}
+                    </FilterMenu>
+                  </SubframeCore.DropdownMenu.Content>
+                </SubframeCore.DropdownMenu.Portal>
+              </SubframeCore.DropdownMenu.Root>
+
               <div className="flex grow items-center justify-end gap-2">
                 <Button
                   variant="neutral-tertiary"

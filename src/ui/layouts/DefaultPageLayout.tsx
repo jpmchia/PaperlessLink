@@ -10,31 +10,26 @@
  */
 
 import React from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { FeatherBarChart2 } from "@subframe/core";
-import { FeatherBuilding } from "@subframe/core";
 import { FeatherChevronDown } from "@subframe/core";
 import { FeatherColumns } from "@subframe/core";
-import { FeatherDollarSign } from "@subframe/core";
 import { FeatherEye } from "@subframe/core";
 import { FeatherFileText } from "@subframe/core";
 import { FeatherGauge } from "@subframe/core";
-import { FeatherHome } from "@subframe/core";
-import { FeatherInbox } from "@subframe/core";
 import { FeatherLogOut } from "@subframe/core";
 import { FeatherMoreHorizontal } from "@subframe/core";
-import { FeatherRocket } from "@subframe/core";
 import { FeatherSettings } from "@subframe/core";
 import { FeatherTag } from "@subframe/core";
-import { FeatherTent } from "@subframe/core";
 import { FeatherUser } from "@subframe/core";
 import { FeatherUsers } from "@subframe/core";
-import { FeatherWebhook } from "@subframe/core";
 import * as SubframeCore from "@subframe/core";
 import { Avatar } from "../components/Avatar";
 import { Button } from "../components/Button";
 import { DropdownMenu } from "../components/DropdownMenu";
 import { IconButton } from "../components/IconButton";
 import { SidebarWithSections } from "../components/SidebarWithSections";
+import { useAuth } from "@/lib/api/hooks/use-auth";
 import * as SubframeUtils from "../utils";
 
 interface DefaultPageLayoutRootProps
@@ -50,6 +45,14 @@ const DefaultPageLayoutRoot = React.forwardRef<
   { children, className, ...otherProps }: DefaultPageLayoutRootProps,
   ref
 ) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+  };
+
   return (
     <div
       className={SubframeUtils.twClassNames(
@@ -62,23 +65,22 @@ const DefaultPageLayoutRoot = React.forwardRef<
       <SidebarWithSections
         className="mobile:hidden"
         header={
-          <img
-            className="h-6 flex-none object-cover"
-            src="https://res.cloudinary.com/subframe/image/upload/v1711417507/shared/y2rsnhq3mex4auk54aye.png"
-          />
+          <span className="text-heading-2 font-heading-2 text-default-font">
+            Paperless-Link
+          </span>
         }
         footer={
           <>
             <div className="flex grow shrink-0 basis-0 items-start gap-2">
-              <Avatar image="https://res.cloudinary.com/subframe/image/upload/v1711417513/shared/kwut7rhuyivweg8tmyzl.jpg">
-                A
+              <Avatar>
+                U
               </Avatar>
               <div className="flex flex-col items-start">
                 <span className="text-caption-bold font-caption-bold text-default-font">
-                  Irvin
+                  User
                 </span>
                 <span className="text-caption font-caption text-subtext-color">
-                  Founder
+                  Paperless-NGX
                 </span>
               </div>
             </div>
@@ -94,13 +96,16 @@ const DefaultPageLayoutRoot = React.forwardRef<
                   asChild={true}
                 >
                   <DropdownMenu>
-                    <DropdownMenu.DropdownItem icon={<FeatherUser />}>
-                      Profile
-                    </DropdownMenu.DropdownItem>
-                    <DropdownMenu.DropdownItem icon={<FeatherSettings />}>
+                    <DropdownMenu.DropdownItem 
+                      icon={<FeatherSettings />}
+                      onClick={() => router.push("/settings")}
+                    >
                       Settings
                     </DropdownMenu.DropdownItem>
-                    <DropdownMenu.DropdownItem icon={<FeatherLogOut />}>
+                    <DropdownMenu.DropdownItem 
+                      icon={<FeatherLogOut />}
+                      onClick={handleLogout}
+                    >
                       Log out
                     </DropdownMenu.DropdownItem>
                   </DropdownMenu>
@@ -110,186 +115,60 @@ const DefaultPageLayoutRoot = React.forwardRef<
           </>
         }
       >
-        <div className="flex w-full flex-col items-start gap-2 py-4">
-          <span className="text-caption-bold font-caption-bold text-subtext-color uppercase">
+        <SidebarWithSections.NavItem 
+          icon={<FeatherGauge />} 
+          selected={pathname === "/dashboard"}
+          onClick={() => router.push("/dashboard")}
+        >
+          Dashboard
+        </SidebarWithSections.NavItem>
+        <SidebarWithSections.NavItem 
+          icon={<FeatherFileText />} 
+          selected={pathname === "/documents" || pathname?.startsWith("/documents/")}
+          onClick={() => router.push("/documents")}
+        >
+          Documents
+        </SidebarWithSections.NavItem>
+        <SidebarWithSections.NavSection label="Manage">
+          <SidebarWithSections.NavItem 
+            icon={<FeatherUsers />}
+            onClick={() => router.push("/correspondents")}
+          >
+            Correspondents
+          </SidebarWithSections.NavItem>
+          <SidebarWithSections.NavItem 
+            icon={<FeatherTag />}
+            onClick={() => router.push("/tags")}
+          >
+            Tags
+          </SidebarWithSections.NavItem>
+          <SidebarWithSections.NavItem 
+            icon={<FeatherFileText />}
+            onClick={() => router.push("/document-types")}
+          >
+            Document Types
+          </SidebarWithSections.NavItem>
+          <SidebarWithSections.NavItem 
+            icon={<FeatherColumns />}
+            onClick={() => router.push("/custom-fields")}
+          >
+            Custom Fields
+          </SidebarWithSections.NavItem>
+          <SidebarWithSections.NavItem 
+            icon={<FeatherEye />}
+            onClick={() => router.push("/saved-views")}
+          >
             Saved Views
-          </span>
-          <SubframeCore.DropdownMenu.Root>
-            <SubframeCore.DropdownMenu.Trigger asChild={true}>
-              <Button
-                className="h-8 w-full flex-none"
-                variant="neutral-secondary"
-                iconRight={<FeatherChevronDown />}
-              >
-                All Documents
-              </Button>
-            </SubframeCore.DropdownMenu.Trigger>
-            <SubframeCore.DropdownMenu.Portal>
-              <SubframeCore.DropdownMenu.Content
-                side="bottom"
-                align="start"
-                sideOffset={4}
-                asChild={true}
-              >
-                <DropdownMenu>
-                  <DropdownMenu.DropdownItem icon={null}>
-                    All Documents
-                  </DropdownMenu.DropdownItem>
-                  <DropdownMenu.DropdownItem icon={null}>
-                    Recent
-                  </DropdownMenu.DropdownItem>
-                  <DropdownMenu.DropdownItem icon={null}>
-                    Pending Review
-                  </DropdownMenu.DropdownItem>
-                  <DropdownMenu.DropdownItem icon={null}>
-                    Archived
-                  </DropdownMenu.DropdownItem>
-                </DropdownMenu>
-              </SubframeCore.DropdownMenu.Content>
-            </SubframeCore.DropdownMenu.Portal>
-          </SubframeCore.DropdownMenu.Root>
-        </div>
-        <div className="flex w-full flex-col items-start gap-2 py-4">
-          <span className="text-caption-bold font-caption-bold text-subtext-color uppercase">
-            Instance
-          </span>
-          <SubframeCore.DropdownMenu.Root>
-            <SubframeCore.DropdownMenu.Trigger asChild={true}>
-              <Button
-                className="h-8 w-full flex-none"
-                variant="neutral-secondary"
-                iconRight={<FeatherChevronDown />}
-              >
-                Production
-              </Button>
-            </SubframeCore.DropdownMenu.Trigger>
-            <SubframeCore.DropdownMenu.Portal>
-              <SubframeCore.DropdownMenu.Content
-                side="bottom"
-                align="start"
-                sideOffset={4}
-                asChild={true}
-              >
-                <DropdownMenu>
-                  <DropdownMenu.DropdownItem icon={null}>
-                    Production
-                  </DropdownMenu.DropdownItem>
-                  <DropdownMenu.DropdownItem icon={null}>
-                    Staging
-                  </DropdownMenu.DropdownItem>
-                  <DropdownMenu.DropdownItem icon={null}>
-                    Development
-                  </DropdownMenu.DropdownItem>
-                </DropdownMenu>
-              </SubframeCore.DropdownMenu.Content>
-            </SubframeCore.DropdownMenu.Portal>
-          </SubframeCore.DropdownMenu.Root>
-        </div>
-        <SidebarWithSections.NavItem icon={<FeatherHome />} selected={true}>
-          Home
-        </SidebarWithSections.NavItem>
-        <SidebarWithSections.NavItem icon={<FeatherInbox />}>
-          Inbox
-        </SidebarWithSections.NavItem>
-        <SidebarWithSections.NavItem icon={<FeatherBarChart2 />}>
-          Reports
-        </SidebarWithSections.NavItem>
-        <SidebarWithSections.NavSection label="Analytics">
-          <SidebarWithSections.NavItem icon={<FeatherGauge />}>
-            Dashboard
-          </SidebarWithSections.NavItem>
-          <SidebarWithSections.NavItem icon={<FeatherRocket />}>
-            Trends
-          </SidebarWithSections.NavItem>
-          <SidebarWithSections.NavItem icon={<FeatherTent />}>
-            Campaigns
           </SidebarWithSections.NavItem>
         </SidebarWithSections.NavSection>
-        <div className="flex w-full flex-col items-start gap-2 py-6">
-          <span className="text-caption-bold font-caption-bold text-subtext-color uppercase">
-            Open Documents
-          </span>
-          <div className="flex w-full flex-col items-start gap-1">
-            <Button
-              className="h-6 w-full flex-none justify-start"
-              variant="neutral-tertiary"
-              size="small"
-            >
-              Q3_Financial_Report_2024.pdf
-            </Button>
-            <Button
-              className="h-6 w-full flex-none justify-start"
-              variant="neutral-tertiary"
-              size="small"
-            >
-              Service_Agreement_2024.pdf
-            </Button>
-            <Button
-              className="h-6 w-full flex-none justify-start"
-              variant="neutral-tertiary"
-              size="small"
-            >
-              Invoice_INV-2024-1847.pdf
-            </Button>
-          </div>
-        </div>
         <SidebarWithSections.NavSection label="Settings">
-          <SidebarWithSections.NavItem icon={<FeatherBuilding />}>
-            Company
+          <SidebarWithSections.NavItem 
+            icon={<FeatherSettings />}
+            selected={pathname === "/settings"}
+            onClick={() => router.push("/settings")}
+          >
+            Settings
           </SidebarWithSections.NavItem>
-          <SidebarWithSections.NavItem icon={<FeatherDollarSign />}>
-            Payments
-          </SidebarWithSections.NavItem>
-          <SidebarWithSections.NavItem icon={<FeatherWebhook />}>
-            Integrations
-          </SidebarWithSections.NavItem>
-          <div className="flex w-full flex-col items-start gap-2 px-4 py-4">
-            <span className="text-caption-bold font-caption-bold text-subtext-color uppercase">
-              Manage
-            </span>
-            <div className="flex w-full flex-col items-start gap-1">
-              <Button
-                className="h-6 w-full flex-none justify-start"
-                variant="neutral-tertiary"
-                size="small"
-                icon={<FeatherUsers />}
-              >
-                Correspondents
-              </Button>
-              <Button
-                className="h-6 w-full flex-none justify-start"
-                variant="neutral-tertiary"
-                size="small"
-                icon={<FeatherTag />}
-              >
-                Tags
-              </Button>
-              <Button
-                className="h-6 w-full flex-none justify-start"
-                variant="neutral-tertiary"
-                size="small"
-                icon={<FeatherFileText />}
-              >
-                Document Types
-              </Button>
-              <Button
-                className="h-6 w-full flex-none justify-start"
-                variant="neutral-tertiary"
-                size="small"
-                icon={<FeatherColumns />}
-              >
-                Fields
-              </Button>
-              <Button
-                className="h-6 w-full flex-none justify-start"
-                variant="neutral-tertiary"
-                size="small"
-                icon={<FeatherEye />}
-              >
-                Views
-              </Button>
-            </div>
-          </div>
         </SidebarWithSections.NavSection>
       </SidebarWithSections>
       {children ? (

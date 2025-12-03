@@ -129,3 +129,4 @@ if (useRemoteUserAuth) {
 - Ensure proxy strips external Remote-User headers
 - Use HTTPS and secure proxy configuration
 
+

@@ -45,8 +45,8 @@ export function useAuth() {
         localStorage.setItem('auth_token', response.data.token)
         // Clear remote user if token auth succeeds
         localStorage.removeItem('remote_user')
-        // Redirect to dashboard or home
-        router.push('/')
+        // Redirect to dashboard
+        router.push('/dashboard')
       }
       
       return response.data.token

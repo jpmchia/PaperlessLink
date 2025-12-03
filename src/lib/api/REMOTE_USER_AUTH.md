@@ -165,3 +165,4 @@ function handleSSOCallback(ssoResponse: SSOResponse) {
 - [Paperless-ngx Configuration Docs](https://docs.paperless-ngx.com/configuration/)
 - [Django Remote User Authentication](https://docs.djangoproject.com/en/4.1/howto/auth-remote-user/)
 
+
