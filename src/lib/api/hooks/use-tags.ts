@@ -1,116 +1,80 @@
 /**
- * React hooks for TagService
+ * React hooks for TagService with React Query caching
  */
 
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { TagService } from '../services/tag.service'
 import { Tag } from '@/app/data/tag'
 import { ListParams } from '../base-service'
+import { Results } from '@/app/data/results'
+
+// Query keys for React Query
+export const tagsKeys = {
+  all: ['tags'] as const,
+  lists: () => [...tagsKeys.all, 'list'] as const,
+  list: (params?: ListParams) => [...tagsKeys.lists(), params] as const,
+  details: () => [...tagsKeys.all, 'detail'] as const,
+  detail: (id: number) => [...tagsKeys.details(), id] as const,
+  allList: () => [...tagsKeys.all, 'all'] as const,
+}
 
 export function useTags() {
   const service = useMemo(() => new TagService(), [])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<Error | null>(null)
+  const queryClient = useQueryClient()
 
-  const list = useCallback(async (params?: ListParams) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.list(params)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to list tags')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  // Query for listing all tags (most common use case)
+  const listAllQuery = useQuery<Results<Tag>>({
+    queryKey: tagsKeys.allList(),
+    queryFn: () => service.listAll(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000,
+  })
 
-  const listFiltered = useCallback(async (
+  // Wrapper functions for backward compatibility
+  const list = async (params?: ListParams) => {
+    return service.list(params)
+  }
+
+  const listFiltered = async (
     params?: ListParams & { nameFilter?: string; fullPerms?: boolean }
   ) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.listFiltered(params)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to list filtered tags')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+    return service.listFiltered(params)
+  }
 
-  const get = useCallback(async (id: number) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.get(id)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to get tag')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  const get = async (id: number) => {
+    const cached = queryClient.getQueryData<Tag>(tagsKeys.detail(id))
+    if (cached) return cached
+    return service.get(id)
+  }
 
-  const create = useCallback(async (data: Partial<Tag>) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.create(data)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to create tag')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  const create = async (data: Partial<Tag>) => {
+    const result = await service.create(data)
+    // Invalidate tags list to refetch
+    queryClient.invalidateQueries({ queryKey: tagsKeys.all })
+    return result
+  }
 
-  const update = useCallback(async (id: number, data: Partial<Tag>) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.update(id, data)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to update tag')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  const update = async (id: number, data: Partial<Tag>) => {
+    const result = await service.update(id, data)
+    // Invalidate specific tag and list
+    queryClient.invalidateQueries({ queryKey: tagsKeys.detail(id) })
+    queryClient.invalidateQueries({ queryKey: tagsKeys.all })
+    return result
+  }
 
-  const deleteTag = useCallback(async (id: number) => {
-    setLoading(true)
-    setError(null)
-    try {
-      await service.delete(id)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to delete tag')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  const deleteTag = async (id: number) => {
+    await service.delete(id)
+    // Invalidate specific tag and list
+    queryClient.invalidateQueries({ queryKey: tagsKeys.detail(id) })
+    queryClient.invalidateQueries({ queryKey: tagsKeys.all })
+  }
 
-  const listAll = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.listAll()
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to list all tags')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  const listAll = async () => {
+    const cached = queryClient.getQueryData<Results<Tag>>(tagsKeys.allList())
+    if (cached) return cached
+    return listAllQuery.refetch().then((result) => result.data!)
+  }
 
   return {
     service,
@@ -121,8 +85,9 @@ export function useTags() {
     update,
     delete: deleteTag,
     listAll,
-    loading,
-    error,
+    loading: listAllQuery.isLoading,
+    error: listAllQuery.error,
+    // Expose query data for direct access
+    data: listAllQuery.data,
   }
 }
-

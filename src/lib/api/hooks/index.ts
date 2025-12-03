@@ -11,4 +11,5 @@ export { useDocumentTypes } from './use-document-types'
 export { useCustomFields } from './use-custom-fields'
 export { useAuth } from './use-auth'
 export { useRemoteUserAuth } from './use-remote-user-auth'
+export { useSettings } from './use-settings'
 

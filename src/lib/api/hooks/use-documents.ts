@@ -1,103 +1,91 @@
 /**
- * React hooks for DocumentService
+ * React hooks for DocumentService with React Query caching
  */
 
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { DocumentService } from '../services/document.service'
 import { Document } from '@/app/data/document'
 import { FilterRule } from '@/app/data/filter-rule'
 import { ListParams } from '../base-service'
+import { Results } from '@/app/data/results'
+
+// Query keys for React Query
+export const documentsKeys = {
+  all: ['documents'] as const,
+  lists: () => [...documentsKeys.all, 'list'] as const,
+  list: (params?: ListParams) => [...documentsKeys.lists(), params] as const,
+  filtered: (params?: ListParams & { filterRules?: FilterRule[] }) => 
+    [...documentsKeys.lists(), 'filtered', params] as const,
+  details: () => [...documentsKeys.all, 'detail'] as const,
+  detail: (id: number) => [...documentsKeys.details(), id] as const,
+}
 
 export function useDocuments() {
   const service = useMemo(() => new DocumentService(), [])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<Error | null>(null)
+  const queryClient = useQueryClient()
 
+  // Wrapper functions for backward compatibility - memoized to prevent infinite loops
   const list = useCallback(async (params?: ListParams) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.list(params)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to list documents')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
+    return service.list(params)
   }, [service])
 
   const listFiltered = useCallback(async (
     params?: ListParams & { filterRules?: FilterRule[] }
   ) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.listFiltered(params)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to list filtered documents')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
+    return service.listFiltered(params)
   }, [service])
 
   const get = useCallback(async (id: number) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.get(id)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to get document')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+    // Check cache first
+    const cached = queryClient.getQueryData<Document>(documentsKeys.detail(id))
+    if (cached) return cached
+    return service.get(id)
+  }, [service, queryClient])
 
-  const create = useCallback(async (data: Partial<Document>) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.create(data)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to create document')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  // Mutation for creating documents
+  const createMutation = useMutation({
+    mutationFn: (data: Partial<Document>) => service.create(data),
+    onSuccess: () => {
+      // Invalidate document lists
+      queryClient.invalidateQueries({ queryKey: documentsKeys.lists() })
+    },
+  })
 
-  const update = useCallback(async (id: number, data: Partial<Document>) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.update(id, data)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to update document')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  // Mutation for updating documents
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Document> }) =>
+      service.update(id, data),
+    onSuccess: (data, variables) => {
+      // Update cache for specific document
+      queryClient.setQueryData(documentsKeys.detail(variables.id), data)
+      // Invalidate lists
+      queryClient.invalidateQueries({ queryKey: documentsKeys.lists() })
+    },
+  })
 
-  const deleteDocument = useCallback(async (id: number) => {
-    setLoading(true)
-    setError(null)
-    try {
-      await service.delete(id)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to delete document')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  // Mutation for deleting documents
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => service.delete(id),
+    onSuccess: (_, id) => {
+      // Remove from cache
+      queryClient.removeQueries({ queryKey: documentsKeys.detail(id) })
+      // Invalidate lists
+      queryClient.invalidateQueries({ queryKey: documentsKeys.lists() })
+    },
+  })
+
+  const create = async (data: Partial<Document>) => {
+    return createMutation.mutateAsync(data)
+  }
+
+  const update = async (id: number, data: Partial<Document>) => {
+    return updateMutation.mutateAsync({ id, data })
+  }
+
+  const deleteDocument = async (id: number) => {
+    return deleteMutation.mutateAsync(id)
+  }
 
   return {
     service,
@@ -107,8 +95,7 @@ export function useDocuments() {
     create,
     update,
     delete: deleteDocument,
-    loading,
-    error,
+    loading: createMutation.isPending || updateMutation.isPending || deleteMutation.isPending,
+    error: createMutation.error || updateMutation.error || deleteMutation.error,
   }
 }
-

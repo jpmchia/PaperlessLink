@@ -1,74 +1,56 @@
 /**
- * React hooks for DocumentTypeService
+ * React hooks for DocumentTypeService with React Query caching
  */
 
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { DocumentTypeService } from '../services/document-type.service'
 import { DocumentType } from '@/app/data/document-type'
 import { ListParams } from '../base-service'
+import { Results } from '@/app/data/results'
+
+// Query keys for React Query
+export const documentTypesKeys = {
+  all: ['documentTypes'] as const,
+  lists: () => [...documentTypesKeys.all, 'list'] as const,
+  list: (params?: ListParams) => [...documentTypesKeys.lists(), params] as const,
+  details: () => [...documentTypesKeys.all, 'detail'] as const,
+  detail: (id: number) => [...documentTypesKeys.details(), id] as const,
+  allList: () => [...documentTypesKeys.all, 'all'] as const,
+}
 
 export function useDocumentTypes() {
   const service = useMemo(() => new DocumentTypeService(), [])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<Error | null>(null)
+  const queryClient = useQueryClient()
 
-  const list = useCallback(async (params?: ListParams) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.list(params)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to list document types')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  // Query for listing all document types (most common use case)
+  const listAllQuery = useQuery<Results<DocumentType>>({
+    queryKey: documentTypesKeys.allList(),
+    queryFn: () => service.listAll(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000,
+  })
 
-  const listFiltered = useCallback(async (
-    params?: ListParams & { nameFilter?: string }
-  ) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.listFiltered(params)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to list filtered document types')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  // Wrapper functions for backward compatibility
+  const list = async (params?: ListParams) => {
+    return service.list(params)
+  }
 
-  const get = useCallback(async (id: number) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.get(id)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to get document type')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  const listFiltered = async (params?: ListParams & { nameFilter?: string }) => {
+    return service.listFiltered(params)
+  }
 
-  const listAll = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.listAll()
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to list all document types')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  const get = async (id: number) => {
+    const cached = queryClient.getQueryData<DocumentType>(documentTypesKeys.detail(id))
+    if (cached) return cached
+    return service.get(id)
+  }
+
+  const listAll = async () => {
+    const cached = queryClient.getQueryData<Results<DocumentType>>(documentTypesKeys.allList())
+    if (cached) return cached
+    return listAllQuery.refetch().then((result) => result.data!)
+  }
 
   return {
     service,
@@ -76,9 +58,9 @@ export function useDocumentTypes() {
     listFiltered,
     get,
     listAll,
-    loading,
-    error,
+    loading: listAllQuery.isLoading,
+    error: listAllQuery.error,
+    // Expose query data for direct access
+    data: listAllQuery.data,
   }
 }
-
-

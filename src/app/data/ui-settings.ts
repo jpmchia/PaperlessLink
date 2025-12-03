@@ -76,6 +76,24 @@ export const SETTINGS_KEYS = {
   GMAIL_OAUTH_URL: 'gmail_oauth_url',
   OUTLOOK_OAUTH_URL: 'outlook_oauth_url',
   EMAIL_ENABLED: 'email_enabled',
+  // Document filters visibility
+  DOCUMENTS_FILTER_DATE_RANGE: 'general-settings:documents:filter:date-range',
+  DOCUMENTS_FILTER_CATEGORY: 'general-settings:documents:filter:category',
+  DOCUMENTS_FILTER_CORRESPONDENT: 'general-settings:documents:filter:correspondent',
+  DOCUMENTS_FILTER_TAGS: 'general-settings:documents:filter:tags',
+  DOCUMENTS_FILTER_STORAGE_PATH: 'general-settings:documents:filter:storage-path',
+  DOCUMENTS_FILTER_OWNER: 'general-settings:documents:filter:owner',
+  DOCUMENTS_FILTER_STATUS: 'general-settings:documents:filter:status',
+  DOCUMENTS_FILTER_ASN: 'general-settings:documents:filter:asn',
+  // Custom field visibility settings
+  CUSTOM_FIELD_FILTER_PREFIX: 'general-settings:documents:custom-field:filter:',
+  CUSTOM_FIELD_TABLE_COLUMN_PREFIX: 'general-settings:documents:custom-field:table-column:',
+  CUSTOM_FIELD_FILTER_TYPE_PREFIX: 'general-settings:documents:custom-field:filter-type:',
+  CUSTOM_FIELD_TABLE_DISPLAY_TYPE_PREFIX: 'general-settings:documents:custom-field:table-display-type:',
+  CUSTOM_FIELD_EDIT_MODE_PREFIX: 'general-settings:documents:custom-field:edit-mode:',
+  CUSTOM_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX: 'general-settings:documents:custom-field:edit-mode-entry-type:',
+  CUSTOM_FIELD_TAB_PREFIX: 'general-settings:documents:custom-field:tab:',
+  CUSTOM_FIELD_TABS_LIST: 'general-settings:documents:custom-field:tabs-list',
 }
 
 export const SETTINGS: UiSetting[] = [

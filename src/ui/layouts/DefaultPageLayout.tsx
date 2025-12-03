@@ -31,6 +31,7 @@ import { Button } from "../components/Button";
 import { DropdownMenu } from "../components/DropdownMenu";
 import { IconButton } from "../components/IconButton";
 import { SidebarWithSections } from "../components/SidebarWithSections";
+import { SettingsModal } from "../components/SettingsModal";
 import { useAuth } from "@/lib/api/hooks/use-auth";
 import * as SubframeUtils from "../utils";
 
@@ -50,6 +51,7 @@ const DefaultPageLayoutRoot = React.forwardRef<
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useAuth();
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   
   // Sidebar minimized state - persist in localStorage
   const [isMinimized, setIsMinimized] = useState(false);
@@ -140,7 +142,7 @@ const DefaultPageLayoutRoot = React.forwardRef<
                     <DropdownMenu>
                       <DropdownMenu.DropdownItem 
                         icon={<FeatherSettings />}
-                        onClick={() => router.push("/settings")}
+                        onClick={() => setSettingsModalOpen(true)}
                       >
                         Settings
                       </DropdownMenu.DropdownItem>
@@ -260,6 +262,7 @@ const DefaultPageLayoutRoot = React.forwardRef<
           {children}
         </div>
       ) : null}
+      <SettingsModal open={settingsModalOpen} onOpenChange={setSettingsModalOpen} />
     </div>
   );
 });

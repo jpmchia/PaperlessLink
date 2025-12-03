@@ -1,6 +1,8 @@
 import "./globals.css"
 import type { Metadata } from "next"
 import { AuthGuard } from "@/components/AuthGuard"
+import { WarningSuppressor } from "@/components/WarningSuppressor"
+import { QueryProvider } from "@/components/QueryProvider"
 
 export const metadata: Metadata = {
   title: "Paperless-Link",
@@ -23,7 +25,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
 
       <body>
-        <AuthGuard>{children}</AuthGuard>
+        <WarningSuppressor />
+        <QueryProvider>
+          <AuthGuard>{children}</AuthGuard>
+        </QueryProvider>
       </body>
     </html>
   )

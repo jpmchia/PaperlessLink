@@ -34,27 +34,46 @@ type DistributionType = "type" | "correspondent" | "tags" | "status" | "prepared
 
 export function DashboardWithAnalytics() {
   const { listFiltered, loading: documentsLoading } = useDocuments();
-  const { listAll: listAllTags } = useTags();
-  const { listAll: listAllCorrespondents } = useCorrespondents();
-  const { listAll: listAllDocumentTypes } = useDocumentTypes();
-  const { listAll: listAllCustomFields } = useCustomFields();
+  const { data: tagsData } = useTags();
+  const { data: correspondentsData } = useCorrespondents();
+  const { data: documentTypesData } = useDocumentTypes();
+  const { data: customFieldsData } = useCustomFields();
 
   // Suppress React defaultProps deprecation warning from third-party charting library (@subframe/core)
   useEffect(() => {
     if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
       const originalWarn = console.warn;
+      const originalError = console.error;
+      
+      // Suppress console.warn warnings
       console.warn = (...args: any[]) => {
         if (
           typeof args[0] === 'string' && 
-          (args[0].includes('defaultProps') || args[0].includes('Tooltip: Support for defaultProps'))
+          (args[0].includes('defaultProps') || 
+           args[0].includes('Tooltip: Support for defaultProps') ||
+           args[0].includes('Warning: Tooltip'))
         ) {
           return; // Suppress this specific warning
         }
         originalWarn.apply(console, args);
       };
       
+      // Suppress console.error warnings (React sometimes uses console.error for warnings)
+      console.error = (...args: any[]) => {
+        if (
+          typeof args[0] === 'string' && 
+          (args[0].includes('Warning: Tooltip') ||
+           args[0].includes('defaultProps') ||
+           args[0].includes('Support for defaultProps'))
+        ) {
+          return; // Suppress this specific warning
+        }
+        originalError.apply(console, args);
+      };
+      
       return () => {
         console.warn = originalWarn;
+        console.error = originalError;
       };
     }
   }, []);
@@ -105,26 +124,30 @@ export function DashboardWithAnalytics() {
     [customFields]
   );
 
-  // Fetch filter options on mount
+  // Use React Query data directly - it's already cached and fetched automatically
   useEffect(() => {
-    const fetchFilterOptions = async () => {
-      try {
-        const [typesResult, tagsResult, correspondentsResult, customFieldsResult] = await Promise.all([
-          listAllDocumentTypes(),
-          listAllTags(),
-          listAllCorrespondents(),
-          listAllCustomFields(),
-        ]);
-        setDocumentTypes(typesResult.results);
-        setTags(tagsResult.results);
-        setCorrespondents(correspondentsResult.results);
-        setCustomFields(customFieldsResult.results);
-      } catch (error) {
-        console.error("Failed to fetch filter options:", error);
-      }
-    };
-    fetchFilterOptions();
-  }, [listAllDocumentTypes, listAllTags, listAllCorrespondents, listAllCustomFields]);
+    if (documentTypesData?.results) {
+      setDocumentTypes(documentTypesData.results);
+    }
+  }, [documentTypesData]);
+
+  useEffect(() => {
+    if (tagsData?.results) {
+      setTags(tagsData.results);
+    }
+  }, [tagsData]);
+
+  useEffect(() => {
+    if (correspondentsData?.results) {
+      setCorrespondents(correspondentsData.results);
+    }
+  }, [correspondentsData]);
+
+  useEffect(() => {
+    if (customFieldsData?.results) {
+      setCustomFields(customFieldsData.results);
+    }
+  }, [customFieldsData]);
 
   // Build filter rules
   const filterRules = useMemo<FilterRule[]>(() => {
@@ -180,7 +203,8 @@ export function DashboardWithAnalytics() {
       }
     };
     fetchAllFilteredDocuments();
-  }, [filterRules, listFiltered]); // Only depend on filterRules, not searchQuery
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterRules]); // Only depend on filterRules - listFiltered is now stable
 
   // Fetch paginated documents for table display
   useEffect(() => {
@@ -206,7 +230,8 @@ export function DashboardWithAnalytics() {
       }
     };
     fetchDocuments();
-  }, [currentPage, filterRules, searchQuery, listFiltered, pageSize]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, filterRules, searchQuery, pageSize]); // listFiltered is now stable
 
   // Calculate statistics for pie charts based on ALL filtered documents (not just paginated ones)
   const typeDistribution = useMemo(() => {

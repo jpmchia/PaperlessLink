@@ -1,74 +1,56 @@
 /**
- * React hooks for CorrespondentService
+ * React hooks for CorrespondentService with React Query caching
  */
 
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CorrespondentService } from '../services/correspondent.service'
 import { Correspondent } from '@/app/data/correspondent'
 import { ListParams } from '../base-service'
+import { Results } from '@/app/data/results'
+
+// Query keys for React Query
+export const correspondentsKeys = {
+  all: ['correspondents'] as const,
+  lists: () => [...correspondentsKeys.all, 'list'] as const,
+  list: (params?: ListParams) => [...correspondentsKeys.lists(), params] as const,
+  details: () => [...correspondentsKeys.all, 'detail'] as const,
+  detail: (id: number) => [...correspondentsKeys.details(), id] as const,
+  allList: () => [...correspondentsKeys.all, 'all'] as const,
+}
 
 export function useCorrespondents() {
   const service = useMemo(() => new CorrespondentService(), [])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<Error | null>(null)
+  const queryClient = useQueryClient()
 
-  const list = useCallback(async (params?: ListParams) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.list(params)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to list correspondents')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  // Query for listing all correspondents (most common use case)
+  const listAllQuery = useQuery<Results<Correspondent>>({
+    queryKey: correspondentsKeys.allList(),
+    queryFn: () => service.listAll(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000,
+  })
 
-  const listFiltered = useCallback(async (
-    params?: ListParams & { nameFilter?: string }
-  ) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.listFiltered(params)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to list filtered correspondents')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  // Wrapper functions for backward compatibility
+  const list = async (params?: ListParams) => {
+    return service.list(params)
+  }
 
-  const get = useCallback(async (id: number) => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.get(id)
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to get correspondent')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  const listFiltered = async (params?: ListParams & { nameFilter?: string }) => {
+    return service.listFiltered(params)
+  }
 
-  const listAll = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      return await service.listAll()
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to list all correspondents')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [service])
+  const get = async (id: number) => {
+    const cached = queryClient.getQueryData<Correspondent>(correspondentsKeys.detail(id))
+    if (cached) return cached
+    return service.get(id)
+  }
+
+  const listAll = async () => {
+    const cached = queryClient.getQueryData<Results<Correspondent>>(correspondentsKeys.allList())
+    if (cached) return cached
+    return listAllQuery.refetch().then((result) => result.data!)
+  }
 
   return {
     service,
@@ -76,7 +58,9 @@ export function useCorrespondents() {
     listFiltered,
     get,
     listAll,
-    loading,
-    error,
+    loading: listAllQuery.isLoading,
+    error: listAllQuery.error,
+    // Expose query data for direct access
+    data: listAllQuery.data,
   }
 }
