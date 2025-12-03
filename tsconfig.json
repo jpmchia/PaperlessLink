@@ -24,10 +24,16 @@
     ],
     "paths": {
       "@/*": [
-        "./*"
+        "./src/*"
       ],
       "@/subframe/*": [
         "./src/subframe/*"
+      ],
+      "@/ui/*": [
+        "./src/ui/*"
+      ],
+      "@/lib/*": [
+        "./src/lib/*"
       ]
     }
   },
@@ -39,6 +45,8 @@
     "tailwind.config.js"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "src/app/services/**/*.ts",
+    "src/app/services/**/*.spec.ts"
   ]
 }

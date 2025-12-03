@@ -1,0 +1,162 @@
+@theme {
+  /* Colors */
+  --color-brand-50: rgb(30, 38, 13);
+  --color-brand-100: rgb(37, 46, 15);
+  --color-brand-200: rgb(43, 55, 17);
+  --color-brand-300: rgb(52, 66, 19);
+  --color-brand-400: rgb(65, 82, 21);
+  --color-brand-500: rgb(83, 103, 22);
+  --color-brand-600: rgb(105, 132, 31);
+  --color-brand-700: rgb(161, 192, 48);
+  --color-brand-800: rgb(140, 191, 48);
+  --color-brand-900: rgb(187, 214, 138);
+  --color-neutral-0: rgb(9, 9, 11);
+  --color-neutral-50: rgb(24, 24, 27);
+  --color-neutral-100: rgb(39, 39, 42);
+  --color-neutral-200: rgb(63, 63, 70);
+  --color-neutral-300: rgb(82, 82, 91);
+  --color-neutral-400: rgb(113, 113, 122);
+  --color-neutral-500: rgb(161, 161, 170);
+  --color-neutral-600: rgb(212, 212, 216);
+  --color-neutral-700: rgb(228, 228, 231);
+  --color-neutral-800: rgb(244, 244, 245);
+  --color-neutral-900: rgb(250, 250, 250);
+  --color-neutral-950: rgb(255, 255, 255);
+  --color-error-50: rgb(60, 24, 26);
+  --color-error-100: rgb(72, 26, 29);
+  --color-error-200: rgb(84, 27, 31);
+  --color-error-300: rgb(103, 30, 34);
+  --color-error-400: rgb(130, 32, 37);
+  --color-error-500: rgb(170, 36, 41);
+  --color-error-600: rgb(229, 72, 77);
+  --color-error-700: rgb(242, 85, 90);
+  --color-error-800: rgb(255, 99, 105);
+  --color-error-900: rgb(254, 236, 238);
+  --color-warning-50: rgb(44, 33, 0);
+  --color-warning-100: rgb(53, 40, 0);
+  --color-warning-200: rgb(62, 48, 0);
+  --color-warning-300: rgb(73, 60, 0);
+  --color-warning-400: rgb(89, 74, 5);
+  --color-warning-500: rgb(112, 94, 0);
+  --color-warning-600: rgb(245, 217, 10);
+  --color-warning-700: rgb(255, 239, 92);
+  --color-warning-800: rgb(240, 192, 0);
+  --color-warning-900: rgb(255, 250, 209);
+  --color-success-50: rgb(19, 40, 25);
+  --color-success-100: rgb(22, 48, 29);
+  --color-success-200: rgb(25, 57, 33);
+  --color-success-300: rgb(29, 68, 39);
+  --color-success-400: rgb(36, 85, 48);
+  --color-success-500: rgb(47, 110, 59);
+  --color-success-600: rgb(70, 167, 88);
+  --color-success-700: rgb(85, 180, 103);
+  --color-success-800: rgb(99, 193, 116);
+  --color-success-900: rgb(229, 251, 235);
+  --color-brand-primary: rgb(105, 132, 31);
+  --color-default-font: rgb(250, 250, 250);
+  --color-subtext-color: rgb(161, 161, 170);
+  --color-neutral-border: rgb(63, 63, 70);
+  --color-black: rgb(9, 9, 11);
+  --color-default-background: rgb(9, 9, 11);
+
+  /* Fonts */
+  --text-caption: 12px;
+  --text-caption--font-weight: 400;
+  --text-caption--letter-spacing: 0em;
+  --text-caption--line-height: 16px;
+  --text-caption-bold: 12px;
+  --text-caption-bold--font-weight: 500;
+  --text-caption-bold--letter-spacing: 0em;
+  --text-caption-bold--line-height: 16px;
+  --text-body: 14px;
+  --text-body--font-weight: 400;
+  --text-body--letter-spacing: 0em;
+  --text-body--line-height: 20px;
+  --text-body-bold: 14px;
+  --text-body-bold--font-weight: 500;
+  --text-body-bold--letter-spacing: 0em;
+  --text-body-bold--line-height: 20px;
+  --text-heading-3: 16px;
+  --text-heading-3--font-weight: 300;
+  --text-heading-3--letter-spacing: 0em;
+  --text-heading-3--line-height: 20px;
+  --text-heading-2: 20px;
+  --text-heading-2--font-weight: 300;
+  --text-heading-2--letter-spacing: 0em;
+  --text-heading-2--line-height: 24px;
+  --text-heading-1: 30px;
+  --text-heading-1--font-weight: 300;
+  --text-heading-1--letter-spacing: 0em;
+  --text-heading-1--line-height: 36px;
+  --text-monospace-body: 14px;
+  --text-monospace-body--font-weight: 400;
+  --text-monospace-body--letter-spacing: 0em;
+  --text-monospace-body--line-height: 20px;
+
+  /* Font families */
+  --font-caption: Figtree;
+  --font-caption-bold: Figtree;
+  --font-body: Figtree;
+  --font-body-bold: Figtree;
+  --font-heading-3: Figtree;
+  --font-heading-2: Figtree;
+  --font-heading-1: Figtree;
+  --font-monospace-body: monospace;
+
+  /* Box shadows */
+  --shadow-sm: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+  --shadow-default: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0px 4px 16px -2px rgba(0, 0, 0, 0.08),
+    0px 2px 4px -1px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0px 12px 32px -4px rgba(0, 0, 0, 0.08),
+    0px 4px 8px -2px rgba(0, 0, 0, 0.08);
+  --shadow-overlay: 0px 12px 32px -4px rgba(0, 0, 0, 0.08),
+    0px 4px 8px -2px rgba(0, 0, 0, 0.08);
+
+  /* Border radiuses */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-DEFAULT: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Spacing */
+  --spacing-112: 28rem;
+  --spacing-144: 36rem;
+  --spacing-192: 48rem;
+  --spacing-256: 64rem;
+  --spacing-320: 80rem;
+}
+
+/* Container */
+@utility container {
+  padding-left: 16px;
+  padding-right: 16px;
+
+  @media (width >= theme(--breakpoint-sm)) {
+    padding-left: calc((100vw + 16px - 640px) / 2);
+    padding-right: calc((100vw + 16px - 640px) / 2);
+  }
+
+  @media (width >= theme(--breakpoint-md)) {
+    padding-left: calc((100vw + 16px - 768px) / 2);
+    padding-right: calc((100vw + 16px - 768px) / 2);
+  }
+
+  @media (width >= theme(--breakpoint-lg)) {
+    padding-left: calc((100vw + 16px - 1024px) / 2);
+    padding-right: calc((100vw + 16px - 1024px) / 2);
+  }
+
+  @media (width >= theme(--breakpoint-xl)) {
+    padding-left: calc((100vw + 16px - 1280px) / 2);
+    padding-right: calc((100vw + 16px - 1280px) / 2);
+  }
+
+  @media (width >= theme(--breakpoint-2xl)) {
+    padding-left: calc((100vw + 16px - 1536px) / 2);
+    padding-right: calc((100vw + 16px - 1536px) / 2);
+  }
+}
+
+@custom-variant mobile (@media (max-width: 767px));

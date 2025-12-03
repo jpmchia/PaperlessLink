@@ -1,5 +1,5 @@
 {
-  "name": "subframe-nextjs-starter-kit",
+  "name": "PaperlessLink",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@subframe/core": "^1.147.0",
+    "@subframe/core": "^1.148.0",
     "@tailwindcss/postcss": "^4.1.8",
     "classnames": "^2.3.2",
     "next": "^14.2.3",
@@ -19,11 +19,12 @@
     "tailwindcss": "^4.1.8"
   },
   "devDependencies": {
-    "@types/node": "^20",
+    "@eslint/js": "^9.39.1",
+    "@types/node": "20.19.25",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "13.5.4",
-    "typescript": "^5"
+    "eslint": "^9.39.1",
+    "eslint-config-next": "16.0.6",
+    "typescript": "5.9.3"
   }
 }
