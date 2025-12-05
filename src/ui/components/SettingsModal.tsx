@@ -57,22 +57,77 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   
   // Combined list of all views (saved + drafts)
   // Local drafts take precedence over saved views with the same ID
-  const allViews = useMemo(() => {
+  // Use refs to track previous values and state to trigger re-renders only when content changes
+  const localDraftViewsArrayRef = useRef<CustomView[]>([]);
+  const prevCustomViewsKeyRef = useRef<string>('');
+  const prevLocalDraftViewsKeyRef = useRef<string>('');
+  const [localDraftViewsKey, setLocalDraftViewsKey] = useState<string>('');
+  const [customViewsKey, setCustomViewsKey] = useState<string>('');
+  
+  // Update state only when content actually changes (using refs to track previous values)
+  useEffect(() => {
+    const newCustomViewsKey = JSON.stringify(customViews.map(v => ({ id: v.id, name: v.name })));
+    if (newCustomViewsKey !== prevCustomViewsKeyRef.current) {
+      prevCustomViewsKeyRef.current = newCustomViewsKey;
+      setCustomViewsKey(newCustomViewsKey);
+    }
+  }, [customViews]);
+  
+  useEffect(() => {
     const draftsArray = Array.from(localDraftViews.values());
+    // Include content that matters for view rendering (column_visibility, column_display_types, etc.)
+    // This ensures the key changes when view content changes, triggering allViews recalculation
+    const newDraftsKey = `${localDraftViews.size}:${JSON.stringify(draftsArray.map(v => ({ 
+      id: v.id, 
+      name: v.name,
+      column_order: v.column_order,
+      column_visibility: v.column_visibility,
+      column_display_types: v.column_display_types,
+      column_sizing: v.column_sizing,
+    })))}`;
+    if (newDraftsKey !== prevLocalDraftViewsKeyRef.current) {
+      prevLocalDraftViewsKeyRef.current = newDraftsKey;
+      localDraftViewsArrayRef.current = draftsArray;
+      setLocalDraftViewsKey(newDraftsKey);
+    }
+  }, [localDraftViews]);
+  
+  const allViews = useMemo(() => {
+    // Always read directly from localDraftViews to ensure we have the latest data
+    // The ref is updated synchronously in handleUpdateView, but reading directly ensures
+    // we get the latest state even if React batches updates
+    const draftsArray = Array.from(localDraftViews.values());
+    
+    const draftIds = new Set(draftsArray.map(v => v.id).filter(Boolean));
     const savedViewsFiltered = customViews.filter(v => {
       // Exclude saved views if we have a local draft for them
-      if (v.id && localDraftViews.has(v.id)) {
+      if (v.id && draftIds.has(v.id)) {
         return false;
       }
       return true;
     });
     // Put local drafts first so they take precedence in find operations
     return [...draftsArray, ...savedViewsFiltered];
-  }, [customViews, localDraftViews]);
+    // Depend on localDraftViewsKey to trigger recalculation when drafts change
+    // Also include localDraftViews.size as a dependency to catch immediate updates
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customViewsKey, localDraftViewsKey, customViews, localDraftViews.size]);
+  
+  // Track previous values to prevent infinite loops
+  const prevAllViewsLengthRef = useRef(0);
+  const prevCustomViewsLoadingRef = useRef(customViewsLoading);
   
   // Auto-select first view if none selected and views are loaded
   useEffect(() => {
-    if (!customViewsLoading && allViews.length > 0 && selectedViewId === null && open) {
+    const allViewsLength = allViews.length;
+    const allViewsLengthChanged = allViewsLength !== prevAllViewsLengthRef.current;
+    const loadingChanged = customViewsLoading !== prevCustomViewsLoadingRef.current;
+    
+    prevAllViewsLengthRef.current = allViewsLength;
+    prevCustomViewsLoadingRef.current = customViewsLoading;
+    
+    // Only run if loading state changed or allViews actually changed (new views added/removed)
+    if ((loadingChanged || allViewsLengthChanged) && !customViewsLoading && allViewsLength > 0 && selectedViewId === null && open) {
       // Prefer saved views over drafts
       const savedView = customViews.find(v => v.id && typeof v.id === 'number');
       if (savedView && savedView.id) {
@@ -85,16 +140,24 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customViewsLoading, allViews, selectedViewId, open, customViews]);
   
   // Track the view ID for which we've set the original state
   const originalViewIdRef = useRef<number | string | null>(null);
+  const manuallySetOriginalStateRef = useRef<number | string | null>(null);
   
   // Track original state when view is selected (only when view ID changes, not when view content changes)
   useEffect(() => {
     // Only set original state if the view ID has changed
     if (selectedViewId !== originalViewIdRef.current) {
       originalViewIdRef.current = selectedViewId;
+      
+      // If we manually set originalViewState (e.g., when creating a draft), don't overwrite it
+      if (manuallySetOriginalStateRef.current === selectedViewId) {
+        manuallySetOriginalStateRef.current = null; // Clear the flag after first use
+        return;
+      }
       
       if (selectedViewId) {
         const currentView = allViews.find(v => {
@@ -124,12 +187,37 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         setOriginalViewState(null);
       }
     }
-  }, [selectedViewId]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Only depend on selectedViewId - we read from allViews but don't want to re-run when it changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedViewId]);
   
-  // Separate effect to capture original state when allViews becomes available
+  // Separate effect to capture original state when allViews becomes available after view selection
   // This handles the case where selectedViewId is set before allViews is ready
+  const hasSetOriginalStateRef = useRef(false);
+  const prevAllViewsRef = useRef<string>('');
+  
+  // Reset the flag when selectedViewId changes
   useEffect(() => {
-    if (selectedViewId && selectedViewId === originalViewIdRef.current && !originalViewState) {
+    hasSetOriginalStateRef.current = false;
+    prevAllViewsRef.current = '';
+  }, [selectedViewId]);
+  
+  useEffect(() => {
+    // Create a stable key from allViews to detect actual changes
+    const allViewsKey = allViews.map(v => `${v.id || ''}:${v.name || ''}`).join(',');
+    const allViewsChanged = allViewsKey !== prevAllViewsRef.current;
+    prevAllViewsRef.current = allViewsKey;
+    
+    // Only try to set original state if:
+    // 1. We have a selected view
+    // 2. The view ID matches what we're tracking
+    // 3. We haven't set it yet (using ref to avoid dependency on originalViewState)
+    // 4. allViews has items and actually changed (to prevent loops)
+    if (selectedViewId && 
+        selectedViewId === originalViewIdRef.current && 
+        !hasSetOriginalStateRef.current && 
+        allViews.length > 0 &&
+        allViewsChanged) {
       const currentView = allViews.find(v => {
         if (typeof selectedViewId === 'number' && typeof v.id === 'number') {
           return v.id === selectedViewId;
@@ -141,6 +229,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
       });
       
       if (currentView) {
+        hasSetOriginalStateRef.current = true;
         setOriginalViewState({
           ...currentView,
           column_order: currentView.column_order ? [...currentView.column_order] : [],
@@ -150,7 +239,9 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         });
       }
     }
-  }, [allViews, selectedViewId, originalViewState]);
+    // Only depend on allViews and selectedViewId - not originalViewState to avoid loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allViews, selectedViewId]);
   
   // Persist selected view ID to localStorage
   useEffect(() => {
@@ -201,6 +292,13 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
       // Modal just closed - reset formData and clear local drafts
       setFormData({});
       setLocalDraftViews(new Map());
+      
+      // Dispatch event to notify that custom views may have been updated
+      // This allows DocumentsCustomView to refetch and re-apply the selected view
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('customViewsUpdated'));
+        localStorage.setItem('customViewsUpdated', Date.now().toString());
+      }
     }
     
     prevOpenRef.current = open;
@@ -288,6 +386,34 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
       return updated;
     });
     
+    // Update ref and key immediately so allViews can access the new draft right away
+    // This ensures selectedView is found immediately
+    const updatedMap = new Map(localDraftViews);
+    updatedMap.set(tempId, draftView);
+    const draftsArray = Array.from(updatedMap.values());
+    localDraftViewsArrayRef.current = draftsArray;
+    const newDraftsKey = `${updatedMap.size}:${JSON.stringify(draftsArray.map(v => ({ 
+      id: v.id, 
+      name: v.name,
+      column_order: v.column_order,
+      column_visibility: v.column_visibility,
+      column_display_types: v.column_display_types,
+      column_sizing: v.column_sizing,
+    })))}`;
+    prevLocalDraftViewsKeyRef.current = newDraftsKey;
+    setLocalDraftViewsKey(newDraftsKey);
+    
+    // Set original state immediately for the new draft
+    // Mark that we're manually setting it so the effect doesn't overwrite it
+    manuallySetOriginalStateRef.current = tempId;
+    setOriginalViewState({
+      ...draftView,
+      column_order: draftView.column_order ? [...draftView.column_order] : [],
+      column_sizing: draftView.column_sizing ? { ...draftView.column_sizing } : {},
+      column_visibility: draftView.column_visibility ? { ...draftView.column_visibility } : {},
+      column_display_types: draftView.column_display_types ? { ...draftView.column_display_types } : {},
+    });
+    
     // Select the new draft view
     setSelectedViewId(tempId);
     
@@ -295,14 +421,48 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     try {
       const persistedView = await createCustomView(viewData);
       if (persistedView.id) {
-        // Replace draft with persisted view
+        // Remove the draft from local state first
         setLocalDraftViews(prev => {
           const updated = new Map(prev);
           updated.delete(tempId);
-          updated.set(persistedView.id!, persistedView);
           return updated;
         });
-        setSelectedViewId(persistedView.id);
+        
+        // Update ref and key after removing draft
+        const updatedMap = new Map(localDraftViews);
+        updatedMap.delete(tempId);
+        const draftsArray = Array.from(updatedMap.values());
+        localDraftViewsArrayRef.current = draftsArray;
+        const newDraftsKey = `${updatedMap.size}:${JSON.stringify(draftsArray.map(v => ({ 
+          id: v.id, 
+          name: v.name,
+          column_order: v.column_order,
+          column_visibility: v.column_visibility,
+          column_display_types: v.column_display_types,
+          column_sizing: v.column_sizing,
+        })))}`;
+        prevLocalDraftViewsKeyRef.current = newDraftsKey;
+        setLocalDraftViewsKey(newDraftsKey);
+        
+        // Refetch views from API to get the complete list (including the newly created view)
+        const refetchResult = await refetchCustomViews();
+        
+        // Find the persisted view in the refetched data
+        // refetchResult.data is the array returned from the queryFn
+        const refetchedData = refetchResult.data as CustomView[] | undefined;
+        const refetchedView = refetchedData?.find((v: CustomView) => v.id === persistedView.id);
+        const viewToUse = refetchedView || persistedView;
+        
+        // Update original state to the persisted view before changing selectedViewId
+        manuallySetOriginalStateRef.current = viewToUse.id!;
+        setOriginalViewState({
+          ...viewToUse,
+          column_order: viewToUse.column_order ? [...viewToUse.column_order] : [],
+          column_sizing: viewToUse.column_sizing ? { ...viewToUse.column_sizing } : {},
+          column_visibility: viewToUse.column_visibility ? { ...viewToUse.column_visibility } : {},
+          column_display_types: viewToUse.column_display_types ? { ...viewToUse.column_display_types } : {},
+        });
+        setSelectedViewId(viewToUse.id!);
         // TODO: Show success toast
       }
     } catch (error: any) {
@@ -320,57 +480,93 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     // Always update local state first (both drafts and saved views)
     // This allows us to track changes locally and only persist on Save
     if (typeof id === 'string' && id.startsWith('draft-')) {
-      // Update local draft
-      setLocalDraftViews(prev => {
-        const updated = new Map(prev);
-        const existing = updated.get(id);
-        if (existing) {
-          // Deep merge the update
-          const merged = {
-            ...existing,
-            ...viewData,
-            column_order: viewData.column_order !== undefined ? viewData.column_order : existing.column_order,
-            column_sizing: viewData.column_sizing !== undefined 
-              ? { ...existing.column_sizing, ...viewData.column_sizing }
-              : existing.column_sizing,
-            column_visibility: viewData.column_visibility !== undefined
-              ? { ...existing.column_visibility, ...viewData.column_visibility }
-              : existing.column_visibility,
-            column_display_types: viewData.column_display_types !== undefined
-              ? { ...existing.column_display_types, ...viewData.column_display_types }
-              : existing.column_display_types,
-          };
+      // Update local draft - compute the merged view first
+      const existing = localDraftViews.get(id);
+      if (existing) {
+        // Deep merge the update
+        const merged = {
+          ...existing,
+          ...viewData,
+          column_order: viewData.column_order !== undefined ? viewData.column_order : existing.column_order,
+          column_sizing: viewData.column_sizing !== undefined 
+            ? { ...existing.column_sizing, ...viewData.column_sizing }
+            : existing.column_sizing,
+          column_visibility: viewData.column_visibility !== undefined
+            ? { ...existing.column_visibility, ...viewData.column_visibility }
+            : existing.column_visibility,
+          column_display_types: viewData.column_display_types !== undefined
+            ? { ...existing.column_display_types, ...viewData.column_display_types }
+            : existing.column_display_types,
+        };
+        
+        // Update state
+        setLocalDraftViews(prev => {
+          const updated = new Map(prev);
           updated.set(id, merged);
-        }
-        return updated;
-      });
+          return updated;
+        });
+        
+        // Update ref and key immediately BEFORE state update completes
+        // This ensures allViews reads the latest data immediately
+        const updatedMap = new Map(localDraftViews);
+        updatedMap.set(id, merged);
+        const draftsArray = Array.from(updatedMap.values());
+        localDraftViewsArrayRef.current = draftsArray;
+        // Include content that matters to ensure key changes when view content changes
+        const newDraftsKey = `${updatedMap.size}:${JSON.stringify(draftsArray.map(v => ({ 
+          id: v.id, 
+          name: v.name,
+          column_order: v.column_order,
+          column_visibility: v.column_visibility,
+          column_display_types: v.column_display_types,
+          column_sizing: v.column_sizing,
+        })))}`;
+        prevLocalDraftViewsKeyRef.current = newDraftsKey;
+        setLocalDraftViewsKey(newDraftsKey);
+      }
     } else {
       // For saved views, also update in local draft state for editing
       // Check if we have a local draft for this saved view
       const existingDraft = localDraftViews.get(id);
       if (existingDraft) {
+        // Compute merged view first
+        const merged = {
+          ...existingDraft,
+          ...viewData,
+          column_order: viewData.column_order !== undefined ? viewData.column_order : existingDraft.column_order,
+          column_sizing: viewData.column_sizing !== undefined 
+            ? { ...existingDraft.column_sizing, ...viewData.column_sizing }
+            : existingDraft.column_sizing,
+          column_visibility: viewData.column_visibility !== undefined
+            ? { ...existingDraft.column_visibility, ...viewData.column_visibility }
+            : existingDraft.column_visibility,
+          column_display_types: viewData.column_display_types !== undefined
+            ? { ...existingDraft.column_display_types, ...viewData.column_display_types }
+            : existingDraft.column_display_types,
+        };
+        
+        // Update state
         setLocalDraftViews(prev => {
           const updated = new Map(prev);
-          const existing = updated.get(id);
-          if (existing) {
-            const merged = {
-              ...existing,
-              ...viewData,
-              column_order: viewData.column_order !== undefined ? viewData.column_order : existing.column_order,
-              column_sizing: viewData.column_sizing !== undefined 
-                ? { ...existing.column_sizing, ...viewData.column_sizing }
-                : existing.column_sizing,
-              column_visibility: viewData.column_visibility !== undefined
-                ? { ...existing.column_visibility, ...viewData.column_visibility }
-                : existing.column_visibility,
-              column_display_types: viewData.column_display_types !== undefined
-                ? { ...existing.column_display_types, ...viewData.column_display_types }
-                : existing.column_display_types,
-            };
-            updated.set(id, merged);
-          }
+          updated.set(id, merged);
           return updated;
         });
+        
+        // Update ref and key immediately BEFORE state update completes
+        const updatedMap = new Map(localDraftViews);
+        updatedMap.set(id, merged);
+        const draftsArray = Array.from(updatedMap.values());
+        localDraftViewsArrayRef.current = draftsArray;
+        const newDraftsKey = `${updatedMap.size}:${JSON.stringify(draftsArray.map(v => ({ 
+          id: v.id, 
+          name: v.name,
+          column_order: v.column_order,
+          column_visibility: v.column_visibility,
+          column_display_types: v.column_display_types,
+          column_sizing: v.column_sizing,
+        })))}`;
+        prevLocalDraftViewsKeyRef.current = newDraftsKey;
+        setLocalDraftViewsKey(newDraftsKey);
       } else {
         // Create a local draft copy for editing
         const savedView = customViews.find(v => v.id === id);
@@ -392,6 +588,21 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                 : savedView.column_display_types,
             };
             updated.set(id, merged);
+            
+            // Update ref and key immediately so allViews recalculates
+            const draftsArray = Array.from(updated.values());
+            localDraftViewsArrayRef.current = draftsArray;
+            const newDraftsKey = `${updated.size}:${JSON.stringify(draftsArray.map(v => ({ 
+              id: v.id, 
+              name: v.name,
+              column_order: v.column_order,
+              column_visibility: v.column_visibility,
+              column_display_types: v.column_display_types,
+              column_sizing: v.column_sizing,
+            })))}`;
+            prevLocalDraftViewsKeyRef.current = newDraftsKey;
+            setLocalDraftViewsKey(newDraftsKey);
+            
             return updated;
           });
         }
@@ -523,7 +734,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         updated.set(selectedViewId, {
           ...originalViewState,
           id: selectedViewId,
-        } as CustomView);
+        } as unknown as CustomView);
         return updated;
       });
     } else if (typeof selectedViewId === 'number') {

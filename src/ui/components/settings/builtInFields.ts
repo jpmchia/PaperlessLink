@@ -16,8 +16,32 @@ export const BUILT_IN_FIELDS: BuiltInField[] = [
   },
   {
     id: "created",
-    name: "Date",
+    name: "Created Date",
     data_type: CustomFieldDataType.Date,
+    isBuiltIn: true,
+  },
+  {
+    id: "added",
+    name: "Added Date",
+    data_type: CustomFieldDataType.Date,
+    isBuiltIn: true,
+  },
+  {
+    id: "correspondent",
+    name: "Correspondent",
+    data_type: CustomFieldDataType.String,
+    isBuiltIn: true,
+  },
+  {
+    id: "asn",
+    name: "ASN",
+    data_type: CustomFieldDataType.Integer,
+    isBuiltIn: true,
+  },
+  {
+    id: "page_count",
+    name: "Pages",
+    data_type: CustomFieldDataType.Integer,
     isBuiltIn: true,
   },
   {

@@ -22,7 +22,7 @@ export class CustomViewService {
   }
 
   private get basePath(): string {
-    return `${this.baseUrl}/api/custom_views`;
+    return `${this.baseUrl}/api/custom_views/`;
   }
 
   /**
@@ -37,6 +37,7 @@ export class CustomViewService {
       queryParams.global_only = true;
     }
     // Use absolute URL since this is a different service
+    console.log('[CustomViewService] Calling API at:', this.basePath);
     const response = await apiClient.get<Results<CustomView>>(this.basePath, queryParams);
     return response.data;
   }
@@ -69,7 +70,7 @@ export class CustomViewService {
    * Get a single custom view by ID
    */
   async get(id: number): Promise<CustomView> {
-    const url = `${this.basePath}/${id}/`;
+    const url = `${this.basePath}${id}/`;
     const response = await apiClient.get<CustomView>(url);
     return response.data;
   }
@@ -78,7 +79,7 @@ export class CustomViewService {
    * Create a new custom view
    */
   async create(data: Omit<CustomView, 'id'>): Promise<CustomView> {
-    const response = await apiClient.post<CustomView>(`${this.basePath}/`, data);
+    const response = await apiClient.post<CustomView>(this.basePath, data);
     return response.data;
   }
 
@@ -86,7 +87,7 @@ export class CustomViewService {
    * Update an existing custom view
    */
   async update(id: number, data: Partial<CustomView>): Promise<CustomView> {
-    const url = `${this.basePath}/${id}/`;
+    const url = `${this.basePath}${id}/`;
     const response = await apiClient.patch<CustomView>(url, data);
     return response.data;
   }
@@ -95,7 +96,7 @@ export class CustomViewService {
    * Delete a custom view
    */
   async delete(id: number): Promise<void> {
-    const url = `${this.basePath}/${id}/`;
+    const url = `${this.basePath}${id}/`;
     await apiClient.delete(url);
   }
 }

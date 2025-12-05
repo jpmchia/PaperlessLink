@@ -18,14 +18,17 @@ export function useCustomViews() {
     queryKey: QUERY_KEY,
     queryFn: async () => {
       try {
+        console.log('[useCustomViews] Fetching custom views from API...')
         const results = await customViewService.list()
+        console.log('[useCustomViews] Fetched custom views:', results.results?.length || 0, 'views')
         return results.results || []
       } catch (err: any) {
         // If API endpoint doesn't exist (403/404), return empty array gracefully
         if (err?.status === 403 || err?.status === 404) {
-          console.warn('Custom views API endpoint not available:', err)
+          console.warn('[useCustomViews] Custom views API endpoint not available (403/404):', err)
           return []
         }
+        console.error('[useCustomViews] Error fetching custom views:', err)
         throw err
       }
     },
@@ -36,6 +39,11 @@ export function useCustomViews() {
       }
       return failureCount < 3
     },
+    // Ensure query runs on mount and refetches even if cached
+    enabled: true,
+    refetchOnMount: 'always', // Always refetch on mount, even if data is fresh
+    staleTime: 0, // Consider data stale immediately so it refetches
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   })
 
   // Create mutation

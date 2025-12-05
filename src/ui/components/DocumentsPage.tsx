@@ -118,6 +118,36 @@ export function DocumentsPage() {
     return tagMap.get(tagId) || `Tag ${tagId}`;
   }, [tagMap]);
 
+  // Pin and selection state
+  const [pinnedDocuments, setPinnedDocuments] = useState<Set<number>>(new Set());
+  const [selectedDocuments, setSelectedDocuments] = useState<Set<number>>(new Set());
+  
+  // Toggle pin handler
+  const handleTogglePin = useCallback((docId: number) => {
+    setPinnedDocuments(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(docId)) {
+        newSet.delete(docId);
+      } else {
+        newSet.add(docId);
+      }
+      return newSet;
+    });
+  }, []);
+  
+  // Toggle selection handler
+  const handleToggleSelect = useCallback((docId: number) => {
+    setSelectedDocuments(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(docId)) {
+        newSet.delete(docId);
+      } else {
+        newSet.add(docId);
+      }
+      return newSet;
+    });
+  }, []);
+
   // Get custom fields that should be displayed as table columns, sorted by display order
   const visibleCustomFieldColumns = useMemo(() => {
     if (!settings?.settings || !customFields.length) return [];
@@ -226,7 +256,7 @@ export function DocumentsPage() {
     if (!settings?.settings) {
       // Default: all built-in fields enabled (tags are shown under title, not as separate column)
       return {
-        enabledBuiltInFields: new Set(['title', 'modified', 'fileSize', 'category', 'owner']),
+        enabledBuiltInFields: new Set(['title', 'created', 'added', 'correspondent', 'asn', 'page_count', 'fileSize', 'category', 'owner']),
         builtInFieldWidths: new Map<string, number>(),
       };
     }
@@ -234,7 +264,7 @@ export function DocumentsPage() {
     const enabled = new Set<string>();
     const widths = new Map<string, number>();
     
-    ['title', 'modified', 'fileSize', 'category', 'owner'].forEach(fieldId => {
+    ['title', 'created', 'added', 'correspondent', 'asn', 'page_count', 'fileSize', 'category', 'owner'].forEach(fieldId => {
       const key = `${SETTINGS_KEYS.BUILT_IN_FIELD_TABLE_COLUMN_PREFIX}${fieldId}`;
       // Default to true if not set (only exclude if explicitly false)
       const isEnabled = settingsObj[key] !== false;
@@ -264,6 +294,11 @@ export function DocumentsPage() {
     builtInFieldWidths,
     getDocumentTypeName,
     getTagName,
+    getCorrespondentName,
+    pinnedDocuments,
+    selectedDocuments,
+    onTogglePin: handleTogglePin,
+    onToggleSelect: handleToggleSelect,
   });
 
   // Get column order from settings
@@ -302,6 +337,7 @@ export function DocumentsPage() {
                   align="end"
                   sideOffset={8}
                   asChild={true}
+                  style={{ zIndex: 100 }}
                 >
                   <DropdownMenu>
                     <DropdownMenu.DropdownItem
@@ -382,20 +418,32 @@ export function DocumentsPage() {
         }
       });
 
-      // Add any remaining columns that weren't in the order (actions column should always be last)
+      // Add any remaining columns that weren't in the order
+      // Pin/select should always be first, actions should always be second
       // This ensures all enabled columns are shown even if not in the order
+      const pinSelectCol = allColumns.find(col => col.id === 'pin-select');
+      const actionsCol = allColumns.find(col => col.id === 'actions');
+      
+      // Ensure pin-select is first if it exists
+      if (pinSelectCol && !processedIds.has('pin-select')) {
+        orderedColumns.unshift(pinSelectCol);
+        processedIds.add('pin-select');
+      }
+      
+      // Ensure actions is second if it exists
+      if (actionsCol && !processedIds.has('actions')) {
+        const insertIndex = orderedColumns.findIndex(col => col.id === 'pin-select') >= 0 ? 1 : 0;
+        orderedColumns.splice(insertIndex, 0, actionsCol);
+        processedIds.add('actions');
+      }
+      
+      // Add other remaining columns
       allColumns.forEach(col => {
-        if (!processedIds.has(String(col.id)) && col.id !== 'actions') {
+        if (!processedIds.has(String(col.id)) && col.id !== 'actions' && col.id !== 'pin-select') {
           orderedColumns.push(col);
           processedIds.add(String(col.id));
         }
       });
-
-      // Always add actions column last
-      const actionsCol = allColumns.find(col => col.id === 'actions');
-      if (actionsCol && !processedIds.has('actions')) {
-        orderedColumns.push(actionsCol);
-      }
 
       return orderedColumns;
     }

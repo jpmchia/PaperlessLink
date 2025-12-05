@@ -170,7 +170,7 @@ export function EnhancedTable<TData extends Record<string, any>>({
               );
             })}
           </colgroup>
-          <thead className="sticky top-0 z-10 bg-default-background">
+          <thead className="sticky top-0 z-[5] bg-default-background">
             {table.getHeaderGroups().map((headerGroup) => (
               <Table.HeaderRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {

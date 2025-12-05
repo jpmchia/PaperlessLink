@@ -35,7 +35,10 @@ class ApiClient {
     } = options
 
     // Build URL with query parameters
-    const url = new URL(endpoint, this.baseUrl)
+    // If endpoint is already an absolute URL, use it directly; otherwise combine with baseUrl
+    const url = endpoint.startsWith('http://') || endpoint.startsWith('https://')
+      ? new URL(endpoint)
+      : new URL(endpoint, this.baseUrl)
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value != null && value !== '') {

@@ -5,7 +5,8 @@ import { CustomField } from "@/app/data/custom-field";
 import { Badge } from "@/ui/components/Badge";
 import { Avatar } from "@/ui/components/Avatar";
 import { CustomFieldDisplay } from "@/ui/components/CustomFieldDisplay";
-import { FeatherFileText } from "@subframe/core";
+import { Checkbox } from "@/ui/components/Checkbox";
+import { FeatherFileText, FeatherPin } from "@subframe/core";
 import { formatDate, getCustomFieldValue, resolveCustomFieldValue } from './documentUtils';
 
 interface ColumnOptions {
@@ -19,6 +20,11 @@ interface ColumnOptions {
   builtInFieldWidths: Map<string, number>;
   getDocumentTypeName: (typeId: number | undefined) => string;
   getTagName: (tagId: number) => string;
+  getCorrespondentName: (correspondentId: number | undefined) => string;
+  pinnedDocuments?: Set<number>;
+  selectedDocuments?: Set<number>;
+  onTogglePin?: (docId: number) => void;
+  onToggleSelect?: (docId: number) => void;
 }
 
 /**
@@ -31,6 +37,11 @@ export function useTableColumns({
   builtInFieldWidths,
   getDocumentTypeName,
   getTagName,
+  getCorrespondentName,
+  pinnedDocuments = new Set(),
+  selectedDocuments = new Set(),
+  onTogglePin,
+  onToggleSelect,
 }: ColumnOptions) {
   return useMemo<ColumnDef<Document>[]>(() => {
     const allBaseColumns: Record<string, ColumnDef<Document>> = {
@@ -54,20 +65,94 @@ export function useTableColumns({
           );
         },
       },
-      modified: {
-        id: "modified",
-        accessorKey: "modified",
-        header: "Date",
+      created: {
+        id: "created",
+        accessorKey: "created",
+        header: "Created Date",
         enableSorting: true,
         enableResizing: true,
-        minSize: builtInFieldWidths.get('modified') || 150,
-        size: builtInFieldWidths.get('modified'),
+        minSize: builtInFieldWidths.get('created') || 150,
+        size: builtInFieldWidths.get('created'),
         cell: ({ row }) => {
           const doc = row.original;
           return (
             <span className="whitespace-nowrap text-body font-body text-neutral-500">
-              {formatDate(doc.modified || doc.created)}
+              {formatDate(doc.created)}
             </span>
+          );
+        },
+      },
+      added: {
+        id: "added",
+        accessorKey: "added",
+        header: "Added Date",
+        enableSorting: true,
+        enableResizing: true,
+        minSize: builtInFieldWidths.get('added') || 150,
+        size: builtInFieldWidths.get('added'),
+        cell: ({ row }) => {
+          const doc = row.original;
+          return (
+            <span className="whitespace-nowrap text-body font-body text-neutral-500">
+              {formatDate(doc.added)}
+            </span>
+          );
+        },
+      },
+      correspondent: {
+        id: "correspondent",
+        accessorKey: "correspondent",
+        header: "Correspondent",
+        enableSorting: false,
+        enableResizing: true,
+        minSize: builtInFieldWidths.get('correspondent') || 150,
+        size: builtInFieldWidths.get('correspondent'),
+        cell: ({ row }) => {
+          const doc = row.original;
+          return doc.correspondent ? (
+            <span className="text-body font-body text-default-font">
+              {getCorrespondentName(doc.correspondent)}
+            </span>
+          ) : (
+            <span className="text-body font-body text-subtext-color">—</span>
+          );
+        },
+      },
+      asn: {
+        id: "asn",
+        accessorKey: "archive_serial_number",
+        header: "ASN",
+        enableSorting: true,
+        enableResizing: true,
+        minSize: builtInFieldWidths.get('asn') || 80,
+        size: builtInFieldWidths.get('asn'),
+        cell: ({ row }) => {
+          const doc = row.original;
+          return doc.archive_serial_number ? (
+            <span className="text-body font-body text-default-font">
+              {doc.archive_serial_number}
+            </span>
+          ) : (
+            <span className="text-body font-body text-subtext-color">—</span>
+          );
+        },
+      },
+      page_count: {
+        id: "page_count",
+        accessorKey: "page_count",
+        header: "Pages",
+        enableSorting: true,
+        enableResizing: true,
+        minSize: builtInFieldWidths.get('page_count') || 80,
+        size: builtInFieldWidths.get('page_count'),
+        cell: ({ row }) => {
+          const doc = row.original;
+          return doc.page_count !== undefined && doc.page_count !== null ? (
+            <span className="text-body font-body text-default-font">
+              {doc.page_count}
+            </span>
+          ) : (
+            <span className="text-body font-body text-subtext-color">—</span>
           );
         },
       },
@@ -155,7 +240,54 @@ export function useTableColumns({
       }
     );
 
-    return [...baseColumns, ...customFieldColumns];
-  }, [documentTypes, visibleCustomFieldColumns, enabledBuiltInFields, builtInFieldWidths, getDocumentTypeName, getTagName]);
+    // Create pin/select column (always first)
+    const pinSelectColumn: ColumnDef<Document> = {
+      id: "pin-select",
+      header: "",
+      enableSorting: false,
+      enableResizing: false,
+      enableHiding: false,
+      size: 80,
+      minSize: 80,
+      cell: ({ row }) => {
+        const doc = row.original;
+        const docId = doc.id;
+        if (docId === undefined) return null;
+        
+        const isPinned = pinnedDocuments.has(docId);
+        const isSelected = selectedDocuments.has(docId);
+        
+        return (
+          <div className="flex items-center gap-2">
+            {/* Pin icon */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePin?.(docId);
+              }}
+              className="p-1 hover:bg-neutral-50 rounded flex-shrink-0"
+              title={isPinned ? "Unpin document" : "Pin document"}
+            >
+              <FeatherPin 
+                className={`w-4 h-4 ${isPinned ? 'text-success-600' : 'text-neutral-400'}`}
+                style={{ transform: isPinned ? 'rotate(45deg)' : 'none' }}
+              />
+            </button>
+            
+            {/* Checkbox */}
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={(checked) => {
+                onToggleSelect?.(docId);
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        );
+      },
+    };
+
+    return [pinSelectColumn, ...baseColumns, ...customFieldColumns];
+  }, [documentTypes, visibleCustomFieldColumns, enabledBuiltInFields, builtInFieldWidths, getDocumentTypeName, getTagName, getCorrespondentName, pinnedDocuments, selectedDocuments, onTogglePin, onToggleSelect]);
 }
 

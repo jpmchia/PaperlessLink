@@ -1,26 +1,12 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { Table } from "../Table";
-import { Switch } from "../Switch";
-import { Button } from "../Button";
-import { TextField } from "../TextField";
-import { DropdownMenu } from "../DropdownMenu";
-import { FeatherChevronDown, FeatherGripVertical, FeatherStar } from "@subframe/core";
-import * as SubframeCore from "@subframe/core";
-import { CustomField, DATA_TYPE_LABELS } from "@/app/data/custom-field";
+import { CustomField } from "@/app/data/custom-field";
 import { SETTINGS_KEYS } from "@/app/data/ui-settings";
-import {
-  getFilterTypeOptions,
-  getDefaultFilterType,
-  getTableDisplayTypeOptions,
-  getDefaultTableDisplayType,
-  getEditModeEntryTypeOptions,
-  getDefaultEditModeEntryType,
-} from "./customFieldHelpers";
 import { BUILT_IN_FIELDS, BuiltInField } from "./builtInFields";
+import { CustomFieldRow } from "./CustomFieldRow";
 
-// Union type for fields that can be displayed in the table (both built-in and custom)
 type DisplayableField = (CustomField & { isBuiltIn: false }) | (BuiltInField & { isBuiltIn: true });
 
 interface CustomFieldsTableProps {
@@ -140,25 +126,49 @@ export function CustomFieldsTable({
       return;
     }
 
-    const currentOrder = columnOrder.length > 0 ? [...columnOrder] : [
+    // Normalize the current order - convert customField_ prefixed IDs to numeric IDs
+    const normalizeOrder = (order: (string | number)[]): (string | number)[] => {
+      return order.map(id => {
+        if (typeof id === 'string' && id.startsWith('customField_')) {
+          const numId = parseInt(id.replace('customField_', ''), 10);
+          return isNaN(numId) ? id : numId;
+        }
+        return id;
+      });
+    };
+
+    const currentOrderRaw = columnOrder.length > 0 ? [...columnOrder] : [
       ...BUILT_IN_FIELDS.map(bf => bf.id),
       ...customFieldOrder,
     ];
+    const currentOrder = normalizeOrder(currentOrderRaw);
 
-    const draggedIndex = currentOrder.indexOf(draggedFieldId);
-    const targetIndex = currentOrder.indexOf(targetFieldId);
+    // Normalize IDs for comparison
+    const normalizeId = (id: string | number): string | number => {
+      if (typeof id === 'string' && id.startsWith('customField_')) {
+        const numId = parseInt(id.replace('customField_', ''), 10);
+        return isNaN(numId) ? id : numId;
+      }
+      return id;
+    };
+
+    const normalizedDraggedId = normalizeId(draggedFieldId);
+    const normalizedTargetId = normalizeId(targetFieldId);
+
+    const draggedIndex = currentOrder.findIndex(id => normalizeId(id) === normalizedDraggedId);
+    const targetIndex = currentOrder.findIndex(id => normalizeId(id) === normalizedTargetId);
 
     if (draggedIndex === -1) {
       // Field not in order yet, add it at target position
-      currentOrder.splice(targetIndex >= 0 ? targetIndex : currentOrder.length, 0, draggedFieldId);
+      currentOrder.splice(targetIndex >= 0 ? targetIndex : currentOrder.length, 0, normalizedDraggedId);
     } else if (targetIndex === -1) {
       // Target not in order, move dragged to end
       currentOrder.splice(draggedIndex, 1);
-      currentOrder.push(draggedFieldId);
+      currentOrder.push(normalizedDraggedId);
     } else {
       // Both in order, reorder
       currentOrder.splice(draggedIndex, 1);
-      currentOrder.splice(targetIndex, 0, draggedFieldId);
+      currentOrder.splice(targetIndex, 0, normalizedDraggedId);
     }
 
     // Ensure all visible fields are in the order
@@ -174,7 +184,8 @@ export function CustomFieldsTable({
 
     // Add any missing visible fields to the end
     [...visibleBuiltInFields, ...visibleCustomFields].forEach(fieldId => {
-      if (!currentOrder.includes(fieldId)) {
+      const normalizedFieldId = normalizeId(fieldId);
+      if (!currentOrder.some(id => normalizeId(id) === normalizedFieldId)) {
         currentOrder.push(fieldId);
       }
     });
@@ -206,426 +217,23 @@ export function CustomFieldsTable({
           </Table.HeaderRow>
         }
       >
-        {allFields.map((field) => {
-          const isBuiltIn = 'isBuiltIn' in field && field.isBuiltIn;
-          const fieldId = isBuiltIn ? (field as BuiltInField).id : (field as CustomField).id;
-          
-          if (fieldId === undefined && !isBuiltIn) return null;
-
-          // For built-in fields, use the field ID string; for custom fields, use the numeric ID
-          const filterKey = isBuiltIn ? null : `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_PREFIX}${fieldId}`;
-          const filterTypeKey = isBuiltIn ? null : `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_TYPE_PREFIX}${fieldId}`;
-          const tableColumnKey = isBuiltIn ? `${SETTINGS_KEYS.BUILT_IN_FIELD_TABLE_COLUMN_PREFIX}${fieldId}` : `${SETTINGS_KEYS.CUSTOM_FIELD_TABLE_COLUMN_PREFIX}${fieldId}`;
-          const tableDisplayTypeKey = isBuiltIn ? null : `${SETTINGS_KEYS.CUSTOM_FIELD_TABLE_DISPLAY_TYPE_PREFIX}${fieldId}`;
-          const columnWidthKey = isBuiltIn ? `general-settings:documents:built-in-field:column-width:${fieldId}` : `${SETTINGS_KEYS.CUSTOM_FIELD_COLUMN_WIDTH_PREFIX}${fieldId}`;
-          const editModeKey = isBuiltIn ? null : `${SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_PREFIX}${fieldId}`;
-          const editModeEntryTypeKey = isBuiltIn ? null : `${SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX}${fieldId}`;
-          const tabKey = isBuiltIn ? null : `${SETTINGS_KEYS.CUSTOM_FIELD_TAB_PREFIX}${fieldId}`;
-          
-          const dataTypeLabel = DATA_TYPE_LABELS.find(
-            (dt) => dt.id === field.data_type
-          )?.name || field.data_type;
-          
-          // Built-in fields can be toggled but default to enabled; can't be filtered or edited
-          const isFilterEnabled = isBuiltIn ? false : getSetting(filterKey!, false);
-          const isTableColumnEnabled = isBuiltIn ? getSetting(tableColumnKey, true) : getSetting(tableColumnKey!, false);
-          const isEditModeEnabled = isBuiltIn ? false : getSetting(editModeKey!, false);
-          
-          const filterTypeOptions = getFilterTypeOptions(field.data_type);
-          const tableDisplayTypeOptions = getTableDisplayTypeOptions();
-          const editModeEntryTypeOptions = getEditModeEntryTypeOptions();
-          const currentFilterType = isBuiltIn ? null : getSetting(filterTypeKey!, getDefaultFilterType(field.data_type));
-          const currentTableDisplayType = isBuiltIn ? getDefaultTableDisplayType(field.data_type) : getSetting(tableDisplayTypeKey!, getDefaultTableDisplayType(field.data_type));
-          const currentEditModeEntryType = isBuiltIn ? null : getSetting(editModeEntryTypeKey!, getDefaultEditModeEntryType(field.data_type));
-          const currentTab = isBuiltIn ? 'Default' : getSetting(tabKey!, 'Default');
-
-          // Get column width - handle both string and number types from settings
-          const columnWidthRaw = getSetting(columnWidthKey, '');
-          let columnWidth = '';
-          if (columnWidthRaw !== '' && columnWidthRaw !== null && columnWidthRaw !== undefined) {
-            columnWidth = typeof columnWidthRaw === 'number' ? String(columnWidthRaw) : String(columnWidthRaw);
-          }
-          const isDragging = !isBuiltIn && draggedFieldId === fieldId;
-
-          const fieldIdForDrag: string | number = isBuiltIn ? (field as BuiltInField).id : (fieldId as number);
-          const isDraggingThis = draggedFieldId === fieldIdForDrag;
-
-          return (
-            <Table.Row 
-              key={isBuiltIn ? `builtin-${fieldIdForDrag}` : fieldId}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, fieldIdForDrag)}
-              className={isDraggingThis ? "opacity-50" : ""}
-            >
-              <Table.Cell>
-                <div 
-                  className="flex items-center justify-center cursor-move"
-                  draggable={true}
-                  onDragStart={(e) => handleDragStart(e, fieldIdForDrag)}
-                  onDragEnd={handleDragEnd}
-                >
-                  <FeatherGripVertical className="w-4 h-4 text-subtext-color hover:text-default-font" />
-                </div>
-              </Table.Cell>
-              <Table.Cell>
-                <div className="flex items-center gap-2">
-                  {isBuiltIn && (
-                    <FeatherStar className="w-4 h-4 text-brand-600 flex-shrink-0" title="Built-in field" />
-                  )}
-                  <span className="text-body-bold font-body-bold text-default-font">
-                    {field.name}
-                  </span>
-                </div>
-              </Table.Cell>
-              <Table.Cell>
-                <span className="text-body font-body text-subtext-color">
-                  {dataTypeLabel}
-                </span>
-              </Table.Cell>
-              <Table.Cell>
-                <div className="flex items-center justify-center">
-                  {isBuiltIn ? (
-                    <Switch
-                      checked={false}
-                      disabled={true}
-                    />
-                  ) : (
-                    <Switch
-                      checked={isFilterEnabled}
-                      onCheckedChange={(checked) =>
-                        updateSetting(filterKey!, checked)
-                      }
-                    />
-                  )}
-                </div>
-              </Table.Cell>
-              <Table.Cell>
-                <div className="flex items-center justify-center">
-                  {isBuiltIn ? (
-                    <span className="text-body font-body text-subtext-color">—</span>
-                  ) : isFilterEnabled ? (
-                    <SubframeCore.DropdownMenu.Root>
-                      <SubframeCore.DropdownMenu.Trigger asChild={true}>
-                        <Button
-                          variant="neutral-secondary"
-                          size="small"
-                          iconRight={<FeatherChevronDown />}
-                          className="w-40 justify-between"
-                        >
-                          {filterTypeOptions.find(opt => opt.value === currentFilterType)?.label || "Select type"}
-                        </Button>
-                      </SubframeCore.DropdownMenu.Trigger>
-                      <SubframeCore.DropdownMenu.Portal>
-                        <SubframeCore.DropdownMenu.Content
-                          side="bottom"
-                          align="start"
-                          sideOffset={4}
-                          asChild={true}
-                          style={{ zIndex: 10001 }}
-                        >
-                          <DropdownMenu className="z-[10001]">
-                            {filterTypeOptions.map((option) => (
-                              <DropdownMenu.DropdownItem
-                                key={option.value}
-                                icon={null}
-                                onClick={() => {
-                                  // Use a longer timeout to ensure dropdown closes before state update
-                                  setTimeout(() => updateSetting(filterTypeKey!, option.value), 150);
-                                }}
-                              >
-                                {option.label}
-                              </DropdownMenu.DropdownItem>
-                            ))}
-                          </DropdownMenu>
-                        </SubframeCore.DropdownMenu.Content>
-                      </SubframeCore.DropdownMenu.Portal>
-                    </SubframeCore.DropdownMenu.Root>
-                  ) : (
-                    <Button
-                      variant="neutral-secondary"
-                      size="small"
-                      disabled={true}
-                      iconRight={<FeatherChevronDown />}
-                      className="w-40 justify-between"
-                    >
-                      {filterTypeOptions.find(opt => opt.value === currentFilterType)?.label || "Select type"}
-                    </Button>
-                  )}
-                </div>
-              </Table.Cell>
-              <Table.Cell>
-                <div className="flex items-center justify-center">
-                  <Switch
-                    checked={isTableColumnEnabled}
-                    onCheckedChange={(checked) =>
-                      updateSetting(tableColumnKey, checked)
-                    }
-                  />
-                </div>
-              </Table.Cell>
-              <Table.Cell>
-                <div className="flex items-center justify-center">
-                  {isBuiltIn || isTableColumnEnabled ? (
-                    <SubframeCore.DropdownMenu.Root>
-                      <SubframeCore.DropdownMenu.Trigger asChild={true}>
-                        <Button
-                          variant="neutral-secondary"
-                          size="small"
-                          iconRight={<FeatherChevronDown />}
-                          className="w-40 justify-between"
-                          disabled={isBuiltIn}
-                        >
-                          {tableDisplayTypeOptions.find(opt => opt.value === currentTableDisplayType)?.label || "Select type"}
-                        </Button>
-                      </SubframeCore.DropdownMenu.Trigger>
-                      {!isBuiltIn && (
-                        <SubframeCore.DropdownMenu.Portal>
-                          <SubframeCore.DropdownMenu.Content
-                            side="bottom"
-                            align="start"
-                            sideOffset={4}
-                            asChild={true}
-                            style={{ zIndex: 10001 }}
-                          >
-                            <DropdownMenu className="z-[10001]">
-                              {tableDisplayTypeOptions.map((option) => (
-                                <DropdownMenu.DropdownItem
-                                  key={option.value}
-                                  icon={null}
-                                  onClick={() => {
-                                    // Use a longer timeout to ensure dropdown closes before state update
-                                    setTimeout(() => updateSetting(tableDisplayTypeKey!, option.value), 150);
-                                  }}
-                                >
-                                  {option.label}
-                                </DropdownMenu.DropdownItem>
-                              ))}
-                            </DropdownMenu>
-                          </SubframeCore.DropdownMenu.Content>
-                        </SubframeCore.DropdownMenu.Portal>
-                      )}
-                    </SubframeCore.DropdownMenu.Root>
-                  ) : (
-                    <Button
-                      variant="neutral-secondary"
-                      size="small"
-                      disabled={true}
-                      iconRight={<FeatherChevronDown />}
-                      className="w-40 justify-between"
-                    >
-                      {tableDisplayTypeOptions.find(opt => opt.value === currentTableDisplayType)?.label || "Select type"}
-                    </Button>
-                  )}
-                </div>
-              </Table.Cell>
-              <Table.Cell>
-                <div className="flex items-center justify-center">
-                  {isBuiltIn || isTableColumnEnabled ? (
-                    <TextField className="w-24">
-                      <TextField.Input
-                        type="number"
-                        placeholder="Auto"
-                        value={columnWidth}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          // Save immediately as string to preserve user input
-                          updateSetting(columnWidthKey, value === '' ? undefined : value);
-                        }}
-                        onBlur={(e) => {
-                          const value = e.target.value.trim();
-                          // On blur, validate and normalize the value
-                          if (value === '') {
-                            updateSetting(columnWidthKey, undefined);
-                          } else {
-                            const numValue = parseInt(value, 10);
-                            if (!isNaN(numValue)) {
-                              // Clamp to valid range
-                              const clampedValue = Math.max(50, Math.min(1000, numValue));
-                              updateSetting(columnWidthKey, String(clampedValue));
-                              // Update the input value if it was clamped
-                              if (clampedValue !== numValue) {
-                                e.target.value = String(clampedValue);
-                              }
-                            } else {
-                              // Invalid value, revert to saved value
-                              const savedValue = getSetting(columnWidthKey, '');
-                              const displayValue = savedValue === '' || savedValue === null || savedValue === undefined 
-                                ? '' 
-                                : (typeof savedValue === 'number' ? String(savedValue) : String(savedValue));
-                              e.target.value = displayValue;
-                            }
-                          }
-                        }}
-                        min={50}
-                        max={1000}
-                      />
-                    </TextField>
-                  ) : (
-                    <span className="text-body font-body text-subtext-color">—</span>
-                  )}
-                </div>
-              </Table.Cell>
-              <Table.Cell>
-                <div className="flex items-center justify-center">
-                  {isBuiltIn ? (
-                    <span className="text-body font-body text-subtext-color">—</span>
-                  ) : (
-                    <Switch
-                      checked={isEditModeEnabled}
-                      onCheckedChange={(checked) =>
-                        updateSetting(editModeKey!, checked)
-                      }
-                    />
-                  )}
-                </div>
-              </Table.Cell>
-              <Table.Cell>
-                <div className="flex items-center justify-center">
-                  {isBuiltIn ? (
-                    <span className="text-body font-body text-subtext-color">—</span>
-                  ) : isEditModeEnabled ? (
-                    <SubframeCore.DropdownMenu.Root>
-                      <SubframeCore.DropdownMenu.Trigger asChild={true}>
-                        <Button
-                          variant="neutral-secondary"
-                          size="small"
-                          iconRight={<FeatherChevronDown />}
-                          className="w-40 justify-between"
-                        >
-                          {editModeEntryTypeOptions.find(opt => opt.value === currentEditModeEntryType)?.label || "Select type"}
-                        </Button>
-                      </SubframeCore.DropdownMenu.Trigger>
-                      <SubframeCore.DropdownMenu.Portal>
-                        <SubframeCore.DropdownMenu.Content
-                          side="bottom"
-                          align="start"
-                          sideOffset={4}
-                          asChild={true}
-                          style={{ zIndex: 10001 }}
-                        >
-                          <DropdownMenu className="z-[10001]">
-                            {editModeEntryTypeOptions.map((option) => (
-                              <DropdownMenu.DropdownItem
-                                key={option.value}
-                                icon={null}
-                                onClick={() => {
-                                  // Use a longer timeout to ensure dropdown closes before state update
-                                  setTimeout(() => updateSetting(editModeEntryTypeKey!, option.value), 150);
-                                }}
-                              >
-                                {option.label}
-                              </DropdownMenu.DropdownItem>
-                            ))}
-                          </DropdownMenu>
-                        </SubframeCore.DropdownMenu.Content>
-                      </SubframeCore.DropdownMenu.Portal>
-                    </SubframeCore.DropdownMenu.Root>
-                  ) : (
-                    <Button
-                      variant="neutral-secondary"
-                      size="small"
-                      disabled={true}
-                      iconRight={<FeatherChevronDown />}
-                      className="w-40 justify-between"
-                    >
-                      {editModeEntryTypeOptions.find(opt => opt.value === currentEditModeEntryType)?.label || "Select type"}
-                    </Button>
-                  )}
-                </div>
-              </Table.Cell>
-              <Table.Cell>
-                <div className="flex items-center justify-center gap-2">
-                  {isEditModeEnabled ? (
-                    <div className="flex items-center gap-2">
-                      <SubframeCore.DropdownMenu.Root>
-                        <SubframeCore.DropdownMenu.Trigger asChild={true}>
-                          <Button
-                            variant="neutral-secondary"
-                            size="small"
-                            iconRight={<FeatherChevronDown />}
-                            className="w-32 justify-between"
-                          >
-                            {currentTab}
-                          </Button>
-                        </SubframeCore.DropdownMenu.Trigger>
-                        <SubframeCore.DropdownMenu.Portal>
-                          <SubframeCore.DropdownMenu.Content
-                            side="bottom"
-                            align="start"
-                            sideOffset={4}
-                            asChild={true}
-                            style={{ zIndex: 10001 }}
-                          >
-                            <DropdownMenu className="z-[10001]">
-                              {tabsList.map((tab) => (
-                                <DropdownMenu.DropdownItem
-                                  key={tab}
-                                  icon={null}
-                                  onClick={() => {
-                                    // Use a longer timeout to ensure dropdown closes before state update
-                                    setTimeout(() => updateSetting(tabKey!, tab), 150);
-                                  }}
-                                >
-                                  {tab}
-                                </DropdownMenu.DropdownItem>
-                              ))}
-                              <DropdownMenu.DropdownDivider />
-                              <div className="px-3 py-2">
-                                <TextField>
-                                  <TextField.Input
-                                    placeholder="Enter new tab name"
-                                    value={newTabInput[field.id! as number] || ''}
-                                    onChange={(e) => {
-                                      const fieldId = field.id! as number;
-                                      setNewTabInput((prev) => ({
-                                        ...prev,
-                                        [fieldId]: e.target.value,
-                                      }));
-                                    }}
-                                    onKeyDown={(e) => {
-                                      const fieldId = field.id as number;
-                                      if (fieldId !== undefined && e.key === 'Enter' && newTabInput[fieldId]) {
-                                        handleAddTab(fieldId, newTabInput[fieldId]);
-                                        e.preventDefault();
-                                      }
-                                    }}
-                                  />
-                                </TextField>
-                                <Button
-                                  variant="brand-primary"
-                                  size="small"
-                                  className="mt-2 w-full"
-                                  onClick={() => {
-                                    const fieldId = field.id as number;
-                                    if (fieldId !== undefined && newTabInput[fieldId]) {
-                                      handleAddTab(fieldId, newTabInput[fieldId]);
-                                    }
-                                  }}
-                                >
-                                  Add Tab
-                                </Button>
-                              </div>
-                            </DropdownMenu>
-                          </SubframeCore.DropdownMenu.Content>
-                        </SubframeCore.DropdownMenu.Portal>
-                      </SubframeCore.DropdownMenu.Root>
-                    </div>
-                  ) : (
-                    <Button
-                      variant="neutral-secondary"
-                      size="small"
-                      disabled={true}
-                      iconRight={<FeatherChevronDown />}
-                      className="w-32 justify-between"
-                    >
-                      {currentTab}
-                    </Button>
-                  )}
-                </div>
-              </Table.Cell>
-            </Table.Row>
-          );
-        })}
+        {allFields.map((field) => (
+          <CustomFieldRow
+            key={field.isBuiltIn ? `builtin-${(field as BuiltInField).id}` : (field as CustomField).id}
+            field={field}
+            getSetting={getSetting}
+            updateSetting={updateSetting}
+            tabsList={tabsList}
+            newTabInput={newTabInput}
+            setNewTabInput={setNewTabInput}
+            handleAddTab={handleAddTab}
+            draggedFieldId={draggedFieldId}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onDragEnd={handleDragEnd}
+          />
+        ))}
       </Table>
     </div>
   );
