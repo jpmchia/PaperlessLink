@@ -112,7 +112,7 @@ function CheckboxDisplay({ value, className }: { value: any; className?: string 
 }
 
 /**
- * List Display - field value contains comma or colon separated list, display them as pills
+ * List Display - field value contains comma, colon, or semicolon separated list, display them as pills
  */
 function ListDisplay({ value, className }: { value: any; className?: string }) {
   if (value === null || value === undefined || value === '') {
@@ -120,8 +120,8 @@ function ListDisplay({ value, className }: { value: any; className?: string }) {
   }
 
   const valueString = String(value);
-  // Split by comma or colon
-  const items = valueString.split(/[,:]/).map(item => item.trim()).filter(item => item.length > 0);
+  // Split by comma, colon, or semicolon
+  const items = valueString.split(/[,:;]/).map(item => item.trim()).filter(item => item.length > 0);
 
   if (items.length === 0) {
     return <span className={`text-body font-body text-subtext-color ${className || ''}`}>—</span>;

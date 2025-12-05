@@ -104,6 +104,7 @@ interface SidebarWithSectionsRootProps
   extends React.HTMLAttributes<HTMLElement> {
   header?: React.ReactNode;
   footer?: React.ReactNode;
+  footerClassName?: string;
   children?: React.ReactNode;
   className?: string;
 }
@@ -115,6 +116,7 @@ const SidebarWithSectionsRoot = React.forwardRef<
   {
     header,
     footer,
+    footerClassName,
     children,
     className,
     ...otherProps
@@ -141,7 +143,10 @@ const SidebarWithSectionsRoot = React.forwardRef<
         </div>
       ) : null}
       {footer ? (
-        <div className="flex w-full flex-none items-center gap-4 border-t border-solid border-neutral-border px-6 py-6">
+        <div className={SubframeUtils.twClassNames(
+          "flex w-full flex-none items-center gap-4 border-t border-solid border-neutral-border px-6 py-6",
+          footerClassName
+        )}>
           {footer}
         </div>
       ) : null}

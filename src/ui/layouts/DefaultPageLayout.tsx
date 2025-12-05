@@ -19,6 +19,7 @@ import { FeatherColumns } from "@subframe/core";
 import { FeatherEye } from "@subframe/core";
 import { FeatherFileText } from "@subframe/core";
 import { FeatherGauge } from "@subframe/core";
+import { FeatherLayers } from "@subframe/core";
 import { FeatherLogOut } from "@subframe/core";
 import { FeatherMoreHorizontal } from "@subframe/core";
 import { FeatherSettings } from "@subframe/core";
@@ -89,6 +90,7 @@ const DefaultPageLayoutRoot = React.forwardRef<
             "mobile:hidden transition-all duration-300 ease-in-out",
             isMinimized ? "w-16" : "w-60"
           )}
+          footerClassName={isMinimized ? "px-0" : ""}
           header={
             <div className={SubframeUtils.twClassNames(
               "flex items-center w-full",
@@ -176,6 +178,14 @@ const DefaultPageLayoutRoot = React.forwardRef<
         >
           {!isMinimized && "Documents"}
         </SidebarWithSections.NavItem>
+        <SidebarWithSections.NavItem 
+          icon={<FeatherLayers />} 
+          selected={pathname === "/custom-views" || pathname?.startsWith("/custom-views/")}
+          onClick={() => router.push("/custom-views")}
+          className={isMinimized ? "justify-center px-2" : ""}
+        >
+          {!isMinimized && "Custom Views"}
+        </SidebarWithSections.NavItem>
         {!isMinimized ? (
           <>
             <SidebarWithSections.NavSection label="Manage">
@@ -213,8 +223,8 @@ const DefaultPageLayoutRoot = React.forwardRef<
             <SidebarWithSections.NavSection label="Settings">
               <SidebarWithSections.NavItem 
                 icon={<FeatherSettings />}
-                selected={pathname === "/settings"}
-                onClick={() => router.push("/settings")}
+                selected={settingsModalOpen}
+                onClick={() => setSettingsModalOpen(true)}
               >
                 Settings
               </SidebarWithSections.NavItem>
@@ -249,8 +259,8 @@ const DefaultPageLayoutRoot = React.forwardRef<
             />
             <SidebarWithSections.NavItem 
               icon={<FeatherSettings />}
-              selected={pathname === "/settings"}
-              onClick={() => router.push("/settings")}
+              selected={settingsModalOpen}
+              onClick={() => setSettingsModalOpen(true)}
               className="justify-center px-2"
             />
           </div>

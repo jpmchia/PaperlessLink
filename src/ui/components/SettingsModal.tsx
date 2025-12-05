@@ -1,22 +1,23 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo, startTransition } from "react";
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
-import { Switch } from "./Switch";
-import { TextField } from "./TextField";
 import { Tabs } from "./Tabs";
-import { Table } from "./Table";
-import { Select } from "./Select";
-import { DropdownMenu } from "./DropdownMenu";
-import { FeatherX, FeatherChevronDown } from "@subframe/core";
+import { FeatherX } from "@subframe/core";
 import { IconButton } from "./IconButton";
 import { useSettings } from "@/lib/api/hooks/use-settings";
 import { useCustomFields } from "@/lib/api/hooks/use-custom-fields";
 import { SETTINGS_KEYS } from "@/app/data/ui-settings";
-import { CustomField, CustomFieldDataType, DATA_TYPE_LABELS } from "@/app/data/custom-field";
-import * as SubframeCore from "@subframe/core";
-import * as SubframeUtils from "../utils";
+import { CustomField } from "@/app/data/custom-field";
+import { useDraggableDialog } from "./settings/useDraggableDialog";
+import { GeneralSettingsTab } from "./settings/GeneralSettingsTab";
+import { AppearanceTab } from "./settings/AppearanceTab";
+import { DocumentsTab } from "./settings/DocumentsTab";
+import { NotificationsTab } from "./settings/NotificationsTab";
+import { CustomFieldsTab } from "./settings/CustomFieldsTab";
+import { useCustomViews } from "@/lib/api/hooks/use-custom-views";
+import { CustomView } from "@/app/data/custom-view";
 
 interface SettingsModalProps {
   open: boolean;
@@ -26,6 +27,18 @@ interface SettingsModalProps {
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const { settings, getSettings, saveSettings, loading } = useSettings();
   const { data: customFieldsData, loading: customFieldsLoading } = useCustomFields();
+  const {
+    customViews,
+    isLoading: customViewsLoading,
+    error: customViewsError,
+    create: createCustomView,
+    update: updateCustomView,
+    delete: deleteCustomView,
+    isDeleting,
+    isCreating,
+    isUpdating,
+    refetch: refetchCustomViews,
+  } = useCustomViews();
   
   // Form state
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -35,17 +48,163 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const [tabsList, setTabsList] = useState<string[]>(['Default']);
   const [newTabInput, setNewTabInput] = useState<Record<number, string>>({});
   
-  // Drag state
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-
-  // Load settings when modal opens - use cached settings directly
+  // Custom View state - support both saved views (with IDs) and local draft views (temporary)
+  const [selectedViewId, setSelectedViewId] = useState<number | string | null>(null);
+  const [localDraftViews, setLocalDraftViews] = useState<Map<string | number, CustomView>>(new Map());
+  // Track original state of selected view for revert functionality
+  const [originalViewState, setOriginalViewState] = useState<CustomView | null>(null);
+  const [isSavingView, setIsSavingView] = useState(false);
+  
+  // Combined list of all views (saved + drafts)
+  // Local drafts take precedence over saved views with the same ID
+  const allViews = useMemo(() => {
+    const draftsArray = Array.from(localDraftViews.values());
+    const savedViewsFiltered = customViews.filter(v => {
+      // Exclude saved views if we have a local draft for them
+      if (v.id && localDraftViews.has(v.id)) {
+        return false;
+      }
+      return true;
+    });
+    // Put local drafts first so they take precedence in find operations
+    return [...draftsArray, ...savedViewsFiltered];
+  }, [customViews, localDraftViews]);
+  
+  // Auto-select first view if none selected and views are loaded
   useEffect(() => {
-    if (open && settings?.settings) {
-      setFormData(settings.settings);
+    if (!customViewsLoading && allViews.length > 0 && selectedViewId === null && open) {
+      // Prefer saved views over drafts
+      const savedView = customViews.find(v => v.id && typeof v.id === 'number');
+      if (savedView && savedView.id) {
+        setSelectedViewId(savedView.id);
+      } else {
+        // Fall back to first available view (including drafts)
+        const firstView = allViews[0];
+        if (firstView && firstView.id) {
+          setSelectedViewId(firstView.id);
+        }
+      }
     }
-  }, [open, settings]);
+  }, [customViewsLoading, allViews, selectedViewId, open, customViews]);
+  
+  // Track the view ID for which we've set the original state
+  const originalViewIdRef = useRef<number | string | null>(null);
+  
+  // Track original state when view is selected (only when view ID changes, not when view content changes)
+  useEffect(() => {
+    // Only set original state if the view ID has changed
+    if (selectedViewId !== originalViewIdRef.current) {
+      originalViewIdRef.current = selectedViewId;
+      
+      if (selectedViewId) {
+        const currentView = allViews.find(v => {
+          if (typeof selectedViewId === 'number' && typeof v.id === 'number') {
+            return v.id === selectedViewId;
+          }
+          if (typeof selectedViewId === 'string' && typeof v.id === 'string') {
+            return v.id === selectedViewId;
+          }
+          return false;
+        });
+        
+        if (currentView) {
+          // Deep clone the view to track original state
+          setOriginalViewState({
+            ...currentView,
+            column_order: currentView.column_order ? [...currentView.column_order] : [],
+            column_sizing: currentView.column_sizing ? { ...currentView.column_sizing } : {},
+            column_visibility: currentView.column_visibility ? { ...currentView.column_visibility } : {},
+            column_display_types: currentView.column_display_types ? { ...currentView.column_display_types } : {},
+          });
+        } else {
+          // View not found yet - set to null for now
+          setOriginalViewState(null);
+        }
+      } else {
+        setOriginalViewState(null);
+      }
+    }
+  }, [selectedViewId]); // eslint-disable-line react-hooks/exhaustive-deps
+  
+  // Separate effect to capture original state when allViews becomes available
+  // This handles the case where selectedViewId is set before allViews is ready
+  useEffect(() => {
+    if (selectedViewId && selectedViewId === originalViewIdRef.current && !originalViewState) {
+      const currentView = allViews.find(v => {
+        if (typeof selectedViewId === 'number' && typeof v.id === 'number') {
+          return v.id === selectedViewId;
+        }
+        if (typeof selectedViewId === 'string' && typeof v.id === 'string') {
+          return v.id === selectedViewId;
+        }
+        return false;
+      });
+      
+      if (currentView) {
+        setOriginalViewState({
+          ...currentView,
+          column_order: currentView.column_order ? [...currentView.column_order] : [],
+          column_sizing: currentView.column_sizing ? { ...currentView.column_sizing } : {},
+          column_visibility: currentView.column_visibility ? { ...currentView.column_visibility } : {},
+          column_display_types: currentView.column_display_types ? { ...currentView.column_display_types } : {},
+        });
+      }
+    }
+  }, [allViews, selectedViewId, originalViewState]);
+  
+  // Persist selected view ID to localStorage
+  useEffect(() => {
+    if (selectedViewId && typeof window !== 'undefined') {
+      localStorage.setItem('lastSelectedCustomViewId', String(selectedViewId));
+    }
+  }, [selectedViewId]);
+  
+  // Drag state
+  const { position, isDragging, handleMouseDown } = useDraggableDialog(open);
+  
+  // Track previous open state to detect when modal opens
+  const prevOpenRef = useRef(open);
+
+  // Load settings when modal opens - only initialize when modal first opens
+  useEffect(() => {
+    const wasClosed = !prevOpenRef.current;
+    const isNowOpen = open;
+    
+    if (wasClosed && isNowOpen) {
+      // Modal just opened - initialize with current settings
+      if (settings?.settings) {
+        setFormData(settings.settings);
+      }
+      
+      // Refetch custom views to ensure we have the latest
+      refetchCustomViews();
+      
+      // Restore last selected view from localStorage
+      if (typeof window !== 'undefined') {
+        const lastSelectedViewId = localStorage.getItem('lastSelectedCustomViewId');
+        if (lastSelectedViewId) {
+          try {
+            // Try to parse as number first (saved view)
+            const numId = parseInt(lastSelectedViewId, 10);
+            if (!isNaN(numId)) {
+              setSelectedViewId(numId);
+            } else {
+              // Otherwise it's a string ID (draft)
+              setSelectedViewId(lastSelectedViewId);
+            }
+          } catch (e) {
+            // Invalid ID, ignore
+          }
+        }
+      }
+    } else if (!isNowOpen && prevOpenRef.current) {
+      // Modal just closed - reset formData and clear local drafts
+      setFormData({});
+      setLocalDraftViews(new Map());
+    }
+    
+    prevOpenRef.current = open;
+  }, [open, settings?.settings, refetchCustomViews]); // Track open state changes and settings availability
 
   // Use React Query data directly - it's already cached and fetched automatically
   useEffect(() => {
@@ -63,41 +222,6 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
       }
     }
   }, [settings]);
-
-  // Helper function to get edit mode entry type options
-  const getEditModeEntryTypeOptions = (): Array<{ value: string; label: string }> => {
-    return [
-      { value: 'text', label: 'Text' },
-      { value: 'url', label: 'URL' },
-      { value: 'number', label: 'Number' },
-      { value: 'unique-id', label: 'Unique ID' },
-      { value: 'boolean', label: 'Boolean' },
-      { value: 'multi-select', label: 'Multi-Select' },
-      { value: 'date', label: 'Date' },
-    ];
-  };
-
-  // Helper function to get default edit mode entry type based on data type
-  const getDefaultEditModeEntryType = (dataType: CustomFieldDataType): string => {
-    switch (dataType) {
-      case CustomFieldDataType.Date:
-        return 'date';
-      case CustomFieldDataType.Url:
-        return 'url';
-      case CustomFieldDataType.Integer:
-      case CustomFieldDataType.Float:
-      case CustomFieldDataType.Monetary:
-        return 'number';
-      case CustomFieldDataType.Boolean:
-        return 'boolean';
-      case CustomFieldDataType.Select:
-        return 'multi-select';
-      case CustomFieldDataType.DocumentLink:
-        return 'unique-id';
-      default:
-        return 'text';
-    }
-  };
 
   // Function to add a new tab
   const handleAddTab = (fieldId: number, tabName: string) => {
@@ -131,172 +255,369 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     }
   };
 
-  const updateSetting = (key: string, value: any) => {
-    setFormData((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
+  const updateSetting = useCallback((key: string, value: any) => {
+    // Use startTransition to mark this as a non-urgent update
+    // This prevents blocking the UI and causing Popper to recalculate continuously
+    startTransition(() => {
+      setFormData((prev) => ({
+        ...prev,
+        [key]: value,
+      }));
+    });
+  }, []);
 
+  // Don't memoize getSetting - it's recreated anyway when formData changes
+  // Memoizing it causes issues because the function reference changes on every formData update
   const getSetting = (key: string, defaultValue: any = null) => {
     return formData[key] ?? defaultValue;
   };
 
-  // Filter type options based on custom field data type
-  const getFilterTypeOptions = (dataType: CustomFieldDataType): Array<{ value: string; label: string }> => {
-    switch (dataType) {
-      case CustomFieldDataType.Date:
-        return [
-          { value: 'date-range', label: 'Date Range' },
-          { value: 'date', label: 'Single Date' },
-          { value: 'populated', label: 'Populated' },
-        ];
-      case CustomFieldDataType.String:
-      case CustomFieldDataType.Url:
-      case CustomFieldDataType.LongText:
-        return [
-          { value: 'text', label: 'Text' },
-          { value: 'exact', label: 'Exact Match' },
-          { value: 'multi-select', label: 'Multi-Select' },
-          { value: 'date-range', label: 'Date Range' },
-          { value: 'populated', label: 'Populated' },
-        ];
-      case CustomFieldDataType.Select:
-        return [
-          { value: 'multi-select', label: 'Multi-Select' },
-          { value: 'single-select', label: 'Single Select' },
-          { value: 'date-range', label: 'Date Range' },
-          { value: 'populated', label: 'Populated' },
-        ];
-      case CustomFieldDataType.Integer:
-      case CustomFieldDataType.Float:
-      case CustomFieldDataType.Monetary:
-        return [
-          { value: 'numerical', label: 'Numerical' },
-          { value: 'range', label: 'Range' },
-          { value: 'date-range', label: 'Date Range' },
-          { value: 'populated', label: 'Populated' },
-        ];
-      case CustomFieldDataType.Boolean:
-        return [
-          { value: 'boolean', label: 'Boolean' },
-          { value: 'date-range', label: 'Date Range' },
-          { value: 'populated', label: 'Populated' },
-        ];
-      case CustomFieldDataType.DocumentLink:
-        return [
-          { value: 'document-link', label: 'Document Link' },
-          { value: 'date-range', label: 'Date Range' },
-          { value: 'populated', label: 'Populated' },
-        ];
-      default:
-        return [
-          { value: 'text', label: 'Text' },
-          { value: 'multi-select', label: 'Multi-Select' },
-          { value: 'date-range', label: 'Date Range' },
-          { value: 'populated', label: 'Populated' },
-        ];
-    }
-  };
-
-  // Table display type options
-  const getTableDisplayTypeOptions = (): Array<{ value: string; label: string }> => {
-    return [
-      { value: 'text', label: 'Text' },
-      { value: 'date', label: 'Date' },
-      { value: 'url', label: 'URL' },
-      { value: 'checkbox', label: 'Checkbox' },
-      { value: 'list', label: 'List' },
-      { value: 'identifier', label: 'Identifier' },
-    ];
-  };
-
-  // Get default table display type based on data type
-  const getDefaultTableDisplayType = (dataType: CustomFieldDataType): string => {
-    switch (dataType) {
-      case CustomFieldDataType.Date:
-        return 'date';
-      case CustomFieldDataType.Url:
-        return 'url';
-      case CustomFieldDataType.Boolean:
-        return 'checkbox';
-      case CustomFieldDataType.Select:
-        return 'list';
-      case CustomFieldDataType.DocumentLink:
-        return 'identifier';
-      default:
-        return 'text';
-    }
-  };
-
-  // Get default filter type based on data type
-  const getDefaultFilterType = (dataType: CustomFieldDataType): string => {
-    switch (dataType) {
-      case CustomFieldDataType.Date:
-        return 'date-range';
-      case CustomFieldDataType.String:
-      case CustomFieldDataType.Url:
-      case CustomFieldDataType.LongText:
-        return 'text';
-      case CustomFieldDataType.Select:
-        return 'multi-select';
-      case CustomFieldDataType.Integer:
-      case CustomFieldDataType.Float:
-      case CustomFieldDataType.Monetary:
-        return 'numerical';
-      case CustomFieldDataType.Boolean:
-        return 'boolean';
-      case CustomFieldDataType.DocumentLink:
-        return 'document-link';
-      default:
-        return 'text';
-    }
-  };
-
-  // Drag handlers
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return; // Only handle left mouse button
-    // Don't start dragging if clicking on the close button
-    if ((e.target as HTMLElement).closest('button')) return;
+  // Custom View handlers
+  const handleSaveView = async (viewData: Omit<CustomView, 'id'>) => {
+    // Create a local draft view first (no API call needed)
+    const tempId = `draft-${Date.now()}`;
+    const draftView: CustomView = {
+      ...viewData,
+      id: tempId as any, // Temporary ID for local drafts
+    };
     
-    setIsDragging(true);
-    setDragStart({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y,
+    // Store in local state
+    setLocalDraftViews(prev => {
+      const updated = new Map(prev);
+      updated.set(tempId, draftView);
+      return updated;
     });
-    e.preventDefault();
+    
+    // Select the new draft view
+    setSelectedViewId(tempId);
+    
+    // Optionally try to persist to API (if available) - but don't block on it
+    try {
+      const persistedView = await createCustomView(viewData);
+      if (persistedView.id) {
+        // Replace draft with persisted view
+        setLocalDraftViews(prev => {
+          const updated = new Map(prev);
+          updated.delete(tempId);
+          updated.set(persistedView.id!, persistedView);
+          return updated;
+        });
+        setSelectedViewId(persistedView.id);
+        // TODO: Show success toast
+      }
+    } catch (error: any) {
+      // API not available or failed - that's OK, we'll keep using the local draft
+      if (error?.message?.includes('API endpoint is not available')) {
+        console.warn("Custom views API not available - using local draft:", error);
+      } else {
+        console.warn("Could not persist view to API (using local draft):", error);
+      }
+      // Don't throw - the local draft is still usable
+    }
   };
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return;
-      setPosition({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y,
+  const handleUpdateView = async (id: number | string, viewData: Partial<CustomView>) => {
+    // Always update local state first (both drafts and saved views)
+    // This allows us to track changes locally and only persist on Save
+    if (typeof id === 'string' && id.startsWith('draft-')) {
+      // Update local draft
+      setLocalDraftViews(prev => {
+        const updated = new Map(prev);
+        const existing = updated.get(id);
+        if (existing) {
+          // Deep merge the update
+          const merged = {
+            ...existing,
+            ...viewData,
+            column_order: viewData.column_order !== undefined ? viewData.column_order : existing.column_order,
+            column_sizing: viewData.column_sizing !== undefined 
+              ? { ...existing.column_sizing, ...viewData.column_sizing }
+              : existing.column_sizing,
+            column_visibility: viewData.column_visibility !== undefined
+              ? { ...existing.column_visibility, ...viewData.column_visibility }
+              : existing.column_visibility,
+            column_display_types: viewData.column_display_types !== undefined
+              ? { ...existing.column_display_types, ...viewData.column_display_types }
+              : existing.column_display_types,
+          };
+          updated.set(id, merged);
+        }
+        return updated;
+      });
+    } else {
+      // For saved views, also update in local draft state for editing
+      // Check if we have a local draft for this saved view
+      const existingDraft = localDraftViews.get(id);
+      if (existingDraft) {
+        setLocalDraftViews(prev => {
+          const updated = new Map(prev);
+          const existing = updated.get(id);
+          if (existing) {
+            const merged = {
+              ...existing,
+              ...viewData,
+              column_order: viewData.column_order !== undefined ? viewData.column_order : existing.column_order,
+              column_sizing: viewData.column_sizing !== undefined 
+                ? { ...existing.column_sizing, ...viewData.column_sizing }
+                : existing.column_sizing,
+              column_visibility: viewData.column_visibility !== undefined
+                ? { ...existing.column_visibility, ...viewData.column_visibility }
+                : existing.column_visibility,
+              column_display_types: viewData.column_display_types !== undefined
+                ? { ...existing.column_display_types, ...viewData.column_display_types }
+                : existing.column_display_types,
+            };
+            updated.set(id, merged);
+          }
+          return updated;
+        });
+      } else {
+        // Create a local draft copy for editing
+        const savedView = customViews.find(v => v.id === id);
+        if (savedView) {
+          setLocalDraftViews(prev => {
+            const updated = new Map(prev);
+            const merged = {
+              ...savedView,
+              ...viewData,
+              column_order: viewData.column_order !== undefined ? viewData.column_order : savedView.column_order,
+              column_sizing: viewData.column_sizing !== undefined 
+                ? { ...savedView.column_sizing, ...viewData.column_sizing }
+                : savedView.column_sizing,
+              column_visibility: viewData.column_visibility !== undefined
+                ? { ...savedView.column_visibility, ...viewData.column_visibility }
+                : savedView.column_visibility,
+              column_display_types: viewData.column_display_types !== undefined
+                ? { ...savedView.column_display_types, ...viewData.column_display_types }
+                : savedView.column_display_types,
+            };
+            updated.set(id, merged);
+            return updated;
+          });
+        }
+      }
+    }
+    // Note: We don't persist to API here - that happens when Save is clicked
+  };
+  
+  // Save current view changes to backend
+  const handleSaveViewChanges = useCallback(async () => {
+    if (!selectedViewId || !originalViewState) return;
+    
+    const currentView = allViews.find(v => {
+      if (typeof selectedViewId === 'number' && typeof v.id === 'number') {
+        return v.id === selectedViewId;
+      }
+      if (typeof selectedViewId === 'string' && typeof v.id === 'string') {
+        return v.id === selectedViewId;
+      }
+      return false;
+    });
+    
+    if (!currentView) return;
+    
+    // Check if this is a draft (new view)
+    if (typeof selectedViewId === 'string' && selectedViewId.startsWith('draft-')) {
+      try {
+        setIsSavingView(true);
+        const persistedView = await createCustomView({
+          name: currentView.name,
+          description: currentView.description,
+          column_order: currentView.column_order || [],
+          column_sizing: currentView.column_sizing || {},
+          column_visibility: currentView.column_visibility || {},
+          column_display_types: currentView.column_display_types || {},
+          filter_rules: currentView.filter_rules || [],
+          filter_visibility: currentView.filter_visibility || {},
+          is_global: currentView.is_global,
+        });
+        
+        if (persistedView.id) {
+          // Replace draft with persisted view
+          setLocalDraftViews(prev => {
+            const updated = new Map(prev);
+            updated.delete(selectedViewId);
+            updated.set(persistedView.id!, persistedView);
+            return updated;
+          });
+          setSelectedViewId(persistedView.id);
+          // Update original state to the persisted view
+          setOriginalViewState({
+            ...persistedView,
+            column_order: persistedView.column_order ? [...persistedView.column_order] : [],
+            column_sizing: persistedView.column_sizing ? { ...persistedView.column_sizing } : {},
+            column_visibility: persistedView.column_visibility ? { ...persistedView.column_visibility } : {},
+            column_display_types: persistedView.column_display_types ? { ...persistedView.column_display_types } : {},
+          });
+          await refetchCustomViews();
+        }
+      } catch (error: any) {
+        console.error("Failed to save view:", error);
+        // If API is not available, keep the local draft - don't throw
+        // The user can still use the draft locally
+        if (error?.message?.includes('API endpoint is not available')) {
+          console.warn("Custom views API not available - keeping local draft");
+          // TODO: Show user-friendly toast notification
+          return; // Exit early - draft remains local
+        }
+        // For other errors, still throw to show error to user
+        throw error;
+      } finally {
+        setIsSavingView(false);
+      }
+    } else if (typeof selectedViewId === 'number') {
+      // Update existing saved view
+      try {
+        setIsSavingView(true);
+        await updateCustomView({
+          id: selectedViewId,
+          data: {
+            column_order: currentView.column_order,
+            column_sizing: currentView.column_sizing,
+            column_visibility: currentView.column_visibility,
+            column_display_types: currentView.column_display_types,
+          },
+        });
+        
+        // Update original state to current state
+        setOriginalViewState({
+          ...currentView,
+          column_order: currentView.column_order ? [...currentView.column_order] : [],
+          column_sizing: currentView.column_sizing ? { ...currentView.column_sizing } : {},
+          column_visibility: currentView.column_visibility ? { ...currentView.column_visibility } : {},
+          column_display_types: currentView.column_display_types ? { ...currentView.column_display_types } : {},
+        });
+        
+        // Remove local draft if it exists (changes are now saved)
+        setLocalDraftViews(prev => {
+          const updated = new Map(prev);
+          updated.delete(selectedViewId);
+          return updated;
+        });
+        
+        await refetchCustomViews();
+      } catch (error: any) {
+        console.error("Failed to save view:", error);
+        // If API is not available, keep the local draft - don't throw
+        if (error?.message?.includes('API endpoint is not available')) {
+          console.warn("Custom views API not available - changes remain local");
+          // TODO: Show user-friendly toast notification
+          return; // Exit early - changes remain in local draft
+        }
+        // For other errors, still throw to show error to user
+        throw error;
+      } finally {
+        setIsSavingView(false);
+      }
+    }
+  }, [selectedViewId, originalViewState, allViews, createCustomView, updateCustomView, refetchCustomViews]);
+  
+  // Revert view to original state
+  const handleRevertViewChanges = useCallback(async () => {
+    if (!selectedViewId || !originalViewState) return;
+    
+    // Restore original state
+    if (typeof selectedViewId === 'string' && selectedViewId.startsWith('draft-')) {
+      setLocalDraftViews(prev => {
+        const updated = new Map(prev);
+        updated.set(selectedViewId, {
+          ...originalViewState,
+          id: selectedViewId,
+        } as CustomView);
+        return updated;
+      });
+    } else if (typeof selectedViewId === 'number') {
+      // Clear local draft to revert to saved state
+      setLocalDraftViews(prev => {
+        const updated = new Map(prev);
+        updated.delete(selectedViewId);
+        return updated;
+      });
+      // Refetch to get fresh data from backend
+      await refetchCustomViews();
+      // Update original state to match the reverted view after refetch
+      // This will happen automatically via the effect that tracks originalViewState
+    }
+  }, [selectedViewId, originalViewState, refetchCustomViews]);
+  
+  // Check if there are unsaved changes
+  const hasUnsavedViewChanges = useMemo(() => {
+    if (!selectedViewId || !originalViewState) return false;
+    
+    const currentView = allViews.find(v => {
+      if (typeof selectedViewId === 'number' && typeof v.id === 'number') {
+        return v.id === selectedViewId;
+      }
+      if (typeof selectedViewId === 'string' && typeof v.id === 'string') {
+        return v.id === selectedViewId;
+      }
+      return false;
+    });
+    
+    if (!currentView) return false;
+    
+    // Compare current view with original
+    const compareArrays = (a: any[] | undefined, b: any[] | undefined): boolean => {
+      const arrA = a || [];
+      const arrB = b || [];
+      if (arrA.length !== arrB.length) return true;
+      return arrA.some((val, idx) => val !== arrB[idx]);
+    };
+    
+    const compareObjects = (a: Record<string, any> | undefined, b: Record<string, any> | undefined): boolean => {
+      const objA = a || {};
+      const objB = b || {};
+      const keysA = Object.keys(objA);
+      const keysB = Object.keys(objB);
+      if (keysA.length !== keysB.length) return true;
+      // Check all keys in both objects
+      const allKeys = new Set([...keysA, ...keysB]);
+      return Array.from(allKeys).some(key => {
+        const valA = objA[key];
+        const valB = objB[key];
+        // Handle nested objects/arrays
+        if (typeof valA === 'object' && typeof valB === 'object' && valA !== null && valB !== null) {
+          return JSON.stringify(valA) !== JSON.stringify(valB);
+        }
+        return valA !== valB;
       });
     };
+    
+    if (compareArrays(currentView.column_order, originalViewState.column_order)) return true;
+    if (compareObjects(currentView.column_sizing, originalViewState.column_sizing)) return true;
+    if (compareObjects(currentView.column_visibility, originalViewState.column_visibility)) return true;
+    if (compareObjects(currentView.column_display_types, originalViewState.column_display_types)) return true;
+    
+    return false;
+  }, [selectedViewId, originalViewState, allViews]);
 
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+  const handleDeleteView = async (id: number | string) => {
+    // Handle local draft deletion
+    if (typeof id === 'string' && id.startsWith('draft-')) {
+      setLocalDraftViews(prev => {
+        const updated = new Map(prev);
+        updated.delete(id);
+        return updated;
+      });
+      if (selectedViewId === id) {
+        setSelectedViewId(null);
+      }
+      return;
     }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, dragStart]);
-
-  // Reset position when modal closes
-  useEffect(() => {
-    if (!open) {
-      setPosition({ x: 0, y: 0 });
+    
+    // Handle saved view deletion via API
+    try {
+      await deleteCustomView(id as number);
+      if (selectedViewId === id) {
+        setSelectedViewId(null);
+      }
+      // TODO: Show success toast
+    } catch (error) {
+      console.error("Failed to delete custom view:", error);
+      // TODO: Show error toast
+      throw error;
     }
-  }, [open]);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -357,701 +678,63 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
               active={activeTab === "custom-fields"}
               onClick={() => setActiveTab("custom-fields")}
             >
-              Custom Fields
+              Custom Views
             </Tabs.Item>
           </Tabs>
 
           {/* Tab Content */}
           <div className="flex flex-col gap-4 w-full mt-4 flex-1 min-h-0 overflow-hidden">
             {activeTab === "general" && (
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Slim Sidebar
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Use a minimized sidebar by default
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.SLIM_SIDEBAR, false)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.SLIM_SIDEBAR, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Bulk Edit Confirmation Dialogs
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Show confirmation dialogs for bulk edit operations
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.BULK_EDIT_CONFIRMATION_DIALOGS, true)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.BULK_EDIT_CONFIRMATION_DIALOGS, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Apply Bulk Edit on Close
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Automatically apply bulk edits when closing the editor
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.BULK_EDIT_APPLY_ON_CLOSE, false)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.BULK_EDIT_APPLY_ON_CLOSE, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex flex-col items-start gap-2">
-                  <span className="text-body-bold font-body-bold text-default-font">
-                    Documents Per Page
-                  </span>
-                  <TextField
-                    variant="outline"
-                    label=""
-                    helpText=""
-                    className="w-32"
-                  >
-                    <TextField.Input
-                      type="number"
-                      value={getSetting(SETTINGS_KEYS.DOCUMENT_LIST_SIZE, 50).toString()}
-                      onChange={(e) =>
-                        updateSetting(SETTINGS_KEYS.DOCUMENT_LIST_SIZE, parseInt(e.target.value) || 50)
-                      }
-                    />
-                  </TextField>
-                </div>
-              </div>
+              <GeneralSettingsTab
+                getSetting={getSetting}
+                updateSetting={updateSetting}
+              />
             )}
 
             {activeTab === "appearance" && (
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Dark Mode
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Enable dark mode theme
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.DARK_MODE_ENABLED, false)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.DARK_MODE_ENABLED, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Use System Theme
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Automatically match system dark mode preference
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.DARK_MODE_USE_SYSTEM, true)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.DARK_MODE_USE_SYSTEM, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Invert Thumbnails in Dark Mode
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Invert document thumbnails when using dark mode
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.DARK_MODE_THUMB_INVERTED, true)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.DARK_MODE_THUMB_INVERTED, checked)
-                    }
-                  />
-                </div>
-              </div>
+              <AppearanceTab
+                getSetting={getSetting}
+                updateSetting={updateSetting}
+              />
             )}
 
             {activeTab === "documents" && (
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col items-start gap-2 mb-2">
-                  <span className="text-heading-3 font-heading-3 text-default-font">
-                    Document Filters
-                  </span>
-                  <span className="text-caption font-caption text-subtext-color">
-                    Choose which filters to display on the Documents page
-                  </span>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Date Range
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Filter documents by creation, modification, or added date
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_DATE_RANGE, true)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_DATE_RANGE, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Category (Document Type)
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Filter by document type/category
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_CATEGORY, true)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_CATEGORY, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Correspondent
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Filter by document correspondent/sender
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_CORRESPONDENT, false)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_CORRESPONDENT, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Tags
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Filter documents by tags
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_TAGS, false)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_TAGS, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Storage Path
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Filter by storage location/path
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_STORAGE_PATH, false)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_STORAGE_PATH, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Owner
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Filter documents by owner/user
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_OWNER, true)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_OWNER, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Status
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Filter by document status (active, archived, inbox)
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_STATUS, true)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_STATUS, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Archive Serial Number (ASN)
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Filter by archive serial number
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_ASN, false)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_ASN, checked)
-                    }
-                  />
-                </div>
-              </div>
+              <DocumentsTab
+                getSetting={getSetting}
+                updateSetting={updateSetting}
+              />
             )}
 
             {activeTab === "notifications" && (
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      New Document Notifications
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Show notifications when new documents are processed
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.NOTIFICATIONS_CONSUMER_NEW_DOCUMENT, true)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.NOTIFICATIONS_CONSUMER_NEW_DOCUMENT, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Success Notifications
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Show notifications for successful operations
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.NOTIFICATIONS_CONSUMER_SUCCESS, true)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.NOTIFICATIONS_CONSUMER_SUCCESS, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Failure Notifications
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Show notifications for failed operations
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.NOTIFICATIONS_CONSUMER_FAILED, true)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.NOTIFICATIONS_CONSUMER_FAILED, checked)
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col items-start gap-1">
-                    <span className="text-body-bold font-body-bold text-default-font">
-                      Suppress Notifications on Dashboard
-                    </span>
-                    <span className="text-caption font-caption text-subtext-color">
-                      Hide notifications when viewing the dashboard
-                    </span>
-                  </div>
-                  <Switch
-                    checked={getSetting(SETTINGS_KEYS.NOTIFICATIONS_CONSUMER_SUPPRESS_ON_DASHBOARD, true)}
-                    onCheckedChange={(checked) =>
-                      updateSetting(SETTINGS_KEYS.NOTIFICATIONS_CONSUMER_SUPPRESS_ON_DASHBOARD, checked)
-                    }
-                  />
-                </div>
-              </div>
+              <NotificationsTab
+                getSetting={getSetting}
+                updateSetting={updateSetting}
+              />
             )}
 
             {activeTab === "custom-fields" && (
-              <div className="flex flex-col gap-4 h-full min-h-0 overflow-hidden">
-                <div className="flex flex-col items-start gap-2 mb-2 flex-none">
-                  <span className="text-heading-3 font-heading-3 text-default-font">
-                    Custom Fields Configuration
-                  </span>
-                  <span className="text-caption font-caption text-subtext-color">
-                    Configure which custom fields are available as filters and table columns
-                  </span>
-                </div>
-
-                {customFieldsLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <span className="text-body font-body text-subtext-color">Loading custom fields...</span>
-                  </div>
-                ) : customFields.length === 0 ? (
-                  <div className="flex items-center justify-center py-8">
-                    <span className="text-body font-body text-subtext-color">No custom fields available</span>
-                  </div>
-                ) : (
-                  <div className="w-full overflow-x-auto overflow-y-auto flex-1 min-h-0 relative">
-                    <Table
-                      header={
-                        <Table.HeaderRow>
-                          <Table.HeaderCell>Field Name</Table.HeaderCell>
-                          <Table.HeaderCell>Data Type</Table.HeaderCell>
-                          <Table.HeaderCell>Show as Filter</Table.HeaderCell>
-                          <Table.HeaderCell>Filter Type</Table.HeaderCell>
-                          <Table.HeaderCell>Show in Table</Table.HeaderCell>
-                          <Table.HeaderCell>Table Display Type</Table.HeaderCell>
-                          <Table.HeaderCell>Show in Edit Mode</Table.HeaderCell>
-                          <Table.HeaderCell>Edit Mode Entry Type</Table.HeaderCell>
-                          <Table.HeaderCell>Tab</Table.HeaderCell>
-                        </Table.HeaderRow>
-                      }
-                    >
-                      {customFields.map((field) => {
-                        const filterKey = `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_PREFIX}${field.id}`;
-                        const filterTypeKey = `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_TYPE_PREFIX}${field.id}`;
-                        const tableColumnKey = `${SETTINGS_KEYS.CUSTOM_FIELD_TABLE_COLUMN_PREFIX}${field.id}`;
-                        const tableDisplayTypeKey = `${SETTINGS_KEYS.CUSTOM_FIELD_TABLE_DISPLAY_TYPE_PREFIX}${field.id}`;
-                        const editModeKey = `${SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_PREFIX}${field.id}`;
-                        const editModeEntryTypeKey = `${SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX}${field.id}`;
-                        const tabKey = `${SETTINGS_KEYS.CUSTOM_FIELD_TAB_PREFIX}${field.id}`;
-                        const dataTypeLabel = DATA_TYPE_LABELS.find(
-                          (dt) => dt.id === field.data_type
-                        )?.name || field.data_type;
-                        const isFilterEnabled = getSetting(filterKey, false);
-                        const isTableColumnEnabled = getSetting(tableColumnKey, false);
-                        const isEditModeEnabled = getSetting(editModeKey, false);
-                        const filterTypeOptions = getFilterTypeOptions(field.data_type);
-                        const tableDisplayTypeOptions = getTableDisplayTypeOptions();
-                        const editModeEntryTypeOptions = getEditModeEntryTypeOptions();
-                        const currentFilterType = getSetting(filterTypeKey, getDefaultFilterType(field.data_type));
-                        const currentTableDisplayType = getSetting(tableDisplayTypeKey, getDefaultTableDisplayType(field.data_type));
-                        const currentEditModeEntryType = getSetting(editModeEntryTypeKey, getDefaultEditModeEntryType(field.data_type));
-                        const currentTab = getSetting(tabKey, 'Default');
-
-                        return (
-                          <Table.Row key={field.id}>
-                            <Table.Cell>
-                              <span className="text-body-bold font-body-bold text-default-font">
-                                {field.name}
-                              </span>
-                            </Table.Cell>
-                            <Table.Cell>
-                              <span className="text-body font-body text-subtext-color">
-                                {dataTypeLabel}
-                              </span>
-                            </Table.Cell>
-                            <Table.Cell>
-                              <div className="flex items-center justify-center">
-                                <Switch
-                                  checked={isFilterEnabled}
-                                  onCheckedChange={(checked) =>
-                                    updateSetting(filterKey, checked)
-                                  }
-                                />
-                              </div>
-                            </Table.Cell>
-                            <Table.Cell>
-                              <div className="flex items-center justify-center">
-                                {isFilterEnabled ? (
-                                  <SubframeCore.DropdownMenu.Root>
-                                    <SubframeCore.DropdownMenu.Trigger asChild={true}>
-                                      <Button
-                                        variant="neutral-secondary"
-                                        size="small"
-                                        iconRight={<FeatherChevronDown />}
-                                        className="w-40 justify-between"
-                                      >
-                                        {filterTypeOptions.find(opt => opt.value === currentFilterType)?.label || "Select type"}
-                                      </Button>
-                                    </SubframeCore.DropdownMenu.Trigger>
-                                  <SubframeCore.DropdownMenu.Portal>
-                                    <SubframeCore.DropdownMenu.Content
-                                      side="bottom"
-                                      align="start"
-                                      sideOffset={4}
-                                      asChild={true}
-                                      style={{ zIndex: 10001 }}
-                                    >
-                                      <DropdownMenu className="z-[10001]">
-                                        {filterTypeOptions.map((option) => (
-                                          <DropdownMenu.DropdownItem
-                                            key={option.value}
-                                            icon={null}
-                                            onClick={() => updateSetting(filterTypeKey, option.value)}
-                                          >
-                                            {option.label}
-                                          </DropdownMenu.DropdownItem>
-                                        ))}
-                                      </DropdownMenu>
-                                    </SubframeCore.DropdownMenu.Content>
-                                  </SubframeCore.DropdownMenu.Portal>
-                                  </SubframeCore.DropdownMenu.Root>
-                                ) : (
-                                  <Button
-                                    variant="neutral-secondary"
-                                    size="small"
-                                    disabled={true}
-                                    iconRight={<FeatherChevronDown />}
-                                    className="w-40 justify-between"
-                                  >
-                                    {filterTypeOptions.find(opt => opt.value === currentFilterType)?.label || "Select type"}
-                                  </Button>
-                                )}
-                              </div>
-                            </Table.Cell>
-                            <Table.Cell>
-                              <div className="flex items-center justify-center">
-                                <Switch
-                                  checked={isTableColumnEnabled}
-                                  onCheckedChange={(checked) =>
-                                    updateSetting(tableColumnKey, checked)
-                                  }
-                                />
-                              </div>
-                            </Table.Cell>
-                            <Table.Cell>
-                              <div className="flex items-center justify-center">
-                                {isTableColumnEnabled ? (
-                                  <SubframeCore.DropdownMenu.Root>
-                                    <SubframeCore.DropdownMenu.Trigger asChild={true}>
-                                      <Button
-                                        variant="neutral-secondary"
-                                        size="small"
-                                        iconRight={<FeatherChevronDown />}
-                                        className="w-40 justify-between"
-                                      >
-                                        {tableDisplayTypeOptions.find(opt => opt.value === currentTableDisplayType)?.label || "Select type"}
-                                      </Button>
-                                    </SubframeCore.DropdownMenu.Trigger>
-                                  <SubframeCore.DropdownMenu.Portal>
-                                    <SubframeCore.DropdownMenu.Content
-                                      side="bottom"
-                                      align="start"
-                                      sideOffset={4}
-                                      asChild={true}
-                                      style={{ zIndex: 10001 }}
-                                    >
-                                      <DropdownMenu className="z-[10001]">
-                                        {tableDisplayTypeOptions.map((option) => (
-                                          <DropdownMenu.DropdownItem
-                                            key={option.value}
-                                            icon={null}
-                                            onClick={() => updateSetting(tableDisplayTypeKey, option.value)}
-                                          >
-                                            {option.label}
-                                          </DropdownMenu.DropdownItem>
-                                        ))}
-                                      </DropdownMenu>
-                                    </SubframeCore.DropdownMenu.Content>
-                                  </SubframeCore.DropdownMenu.Portal>
-                                  </SubframeCore.DropdownMenu.Root>
-                                ) : (
-                                  <Button
-                                    variant="neutral-secondary"
-                                    size="small"
-                                    disabled={true}
-                                    iconRight={<FeatherChevronDown />}
-                                    className="w-40 justify-between"
-                                  >
-                                    {tableDisplayTypeOptions.find(opt => opt.value === currentTableDisplayType)?.label || "Select type"}
-                                  </Button>
-                                )}
-                              </div>
-                            </Table.Cell>
-                            <Table.Cell>
-                              <div className="flex items-center justify-center">
-                                <Switch
-                                  checked={isEditModeEnabled}
-                                  onCheckedChange={(checked) =>
-                                    updateSetting(editModeKey, checked)
-                                  }
-                                />
-                              </div>
-                            </Table.Cell>
-                            <Table.Cell>
-                              <div className="flex items-center justify-center">
-                                {isEditModeEnabled ? (
-                                  <SubframeCore.DropdownMenu.Root>
-                                    <SubframeCore.DropdownMenu.Trigger asChild={true}>
-                                      <Button
-                                        variant="neutral-secondary"
-                                        size="small"
-                                        iconRight={<FeatherChevronDown />}
-                                        className="w-40 justify-between"
-                                      >
-                                        {editModeEntryTypeOptions.find(opt => opt.value === currentEditModeEntryType)?.label || "Select type"}
-                                      </Button>
-                                    </SubframeCore.DropdownMenu.Trigger>
-                                    <SubframeCore.DropdownMenu.Portal>
-                                      <SubframeCore.DropdownMenu.Content
-                                        side="bottom"
-                                        align="start"
-                                        sideOffset={4}
-                                        asChild={true}
-                                        style={{ zIndex: 10001 }}
-                                      >
-                                        <DropdownMenu className="z-[10001]">
-                                          {editModeEntryTypeOptions.map((option) => (
-                                            <DropdownMenu.DropdownItem
-                                              key={option.value}
-                                              icon={null}
-                                              onClick={() => updateSetting(editModeEntryTypeKey, option.value)}
-                                            >
-                                              {option.label}
-                                            </DropdownMenu.DropdownItem>
-                                          ))}
-                                        </DropdownMenu>
-                                      </SubframeCore.DropdownMenu.Content>
-                                    </SubframeCore.DropdownMenu.Portal>
-                                  </SubframeCore.DropdownMenu.Root>
-                                ) : (
-                                  <Button
-                                    variant="neutral-secondary"
-                                    size="small"
-                                    disabled={true}
-                                    iconRight={<FeatherChevronDown />}
-                                    className="w-40 justify-between"
-                                  >
-                                    {editModeEntryTypeOptions.find(opt => opt.value === currentEditModeEntryType)?.label || "Select type"}
-                                  </Button>
-                                )}
-                              </div>
-                            </Table.Cell>
-                            <Table.Cell>
-                              <div className="flex items-center justify-center gap-2">
-                                {isEditModeEnabled ? (
-                                  <div className="flex items-center gap-2">
-                                    <SubframeCore.DropdownMenu.Root>
-                                      <SubframeCore.DropdownMenu.Trigger asChild={true}>
-                                        <Button
-                                          variant="neutral-secondary"
-                                          size="small"
-                                          iconRight={<FeatherChevronDown />}
-                                          className="w-32 justify-between"
-                                        >
-                                          {currentTab}
-                                        </Button>
-                                      </SubframeCore.DropdownMenu.Trigger>
-                                      <SubframeCore.DropdownMenu.Portal>
-                                        <SubframeCore.DropdownMenu.Content
-                                          side="bottom"
-                                          align="start"
-                                          sideOffset={4}
-                                          asChild={true}
-                                          style={{ zIndex: 10001 }}
-                                        >
-                                          <DropdownMenu className="z-[10001]">
-                                            {tabsList.map((tab) => (
-                                              <DropdownMenu.DropdownItem
-                                                key={tab}
-                                                icon={null}
-                                                onClick={() => updateSetting(tabKey, tab)}
-                                              >
-                                                {tab}
-                                              </DropdownMenu.DropdownItem>
-                                            ))}
-                                            <DropdownMenu.DropdownDivider />
-                                            <div className="px-3 py-2">
-                                              <TextField
-                                                placeholder="Enter new tab name"
-                                                value={newTabInput[field.id] || ''}
-                                                onChange={(e) =>
-                                                  setNewTabInput((prev) => ({
-                                                    ...prev,
-                                                    [field.id]: e.target.value,
-                                                  }))
-                                                }
-                                                onKeyDown={(e) => {
-                                                  if (e.key === 'Enter' && newTabInput[field.id]) {
-                                                    handleAddTab(field.id, newTabInput[field.id]);
-                                                    e.preventDefault();
-                                                  }
-                                                }}
-                                              >
-                                                <TextField.Input />
-                                              </TextField>
-                                              <Button
-                                                variant="brand-primary"
-                                                size="small"
-                                                className="mt-2 w-full"
-                                                onClick={() => {
-                                                  if (newTabInput[field.id]) {
-                                                    handleAddTab(field.id, newTabInput[field.id]);
-                                                  }
-                                                }}
-                                              >
-                                                Add Tab
-                                              </Button>
-                                            </div>
-                                          </DropdownMenu>
-                                        </SubframeCore.DropdownMenu.Content>
-                                      </SubframeCore.DropdownMenu.Portal>
-                                    </SubframeCore.DropdownMenu.Root>
-                                  </div>
-                                ) : (
-                                  <Button
-                                    variant="neutral-secondary"
-                                    size="small"
-                                    disabled={true}
-                                    iconRight={<FeatherChevronDown />}
-                                    className="w-32 justify-between"
-                                  >
-                                    {currentTab}
-                                  </Button>
-                                )}
-                              </div>
-                            </Table.Cell>
-                          </Table.Row>
-                        );
-                      })}
-                    </Table>
-                  </div>
-                )}
-              </div>
+              <CustomFieldsTab
+                customFields={customFields}
+                customFieldsLoading={customFieldsLoading}
+                getSetting={getSetting}
+                updateSetting={updateSetting}
+                tabsList={tabsList}
+                newTabInput={newTabInput}
+                setNewTabInput={setNewTabInput}
+                handleAddTab={handleAddTab}
+                customViews={allViews}
+                customViewsLoading={customViewsLoading}
+                customViewsError={customViewsError as Error | null}
+                selectedViewId={selectedViewId}
+                onSelectView={setSelectedViewId}
+                onSaveView={handleSaveView}
+                onUpdateView={handleUpdateView}
+                onDeleteView={handleDeleteView}
+                isSavingView={isSavingView || isCreating || isUpdating}
+                onSaveViewChanges={handleSaveViewChanges}
+                onRevertViewChanges={handleRevertViewChanges}
+                hasUnsavedViewChanges={hasUnsavedViewChanges}
+              />
             )}
           </div>
 

@@ -94,6 +94,10 @@ export const SETTINGS_KEYS = {
   CUSTOM_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX: 'general-settings:documents:custom-field:edit-mode-entry-type:',
   CUSTOM_FIELD_TAB_PREFIX: 'general-settings:documents:custom-field:tab:',
   CUSTOM_FIELD_TABS_LIST: 'general-settings:documents:custom-field:tabs-list',
+  CUSTOM_FIELD_DISPLAY_ORDER: 'general-settings:documents:custom-field:display-order',
+  CUSTOM_FIELD_COLUMN_WIDTH_PREFIX: 'general-settings:documents:custom-field:column-width:',
+  DOCUMENT_LIST_COLUMN_ORDER: 'general-settings:documents:list:column-order',
+  BUILT_IN_FIELD_TABLE_COLUMN_PREFIX: 'general-settings:documents:built-in-field:table-column:',
 }
 
 export const SETTINGS: UiSetting[] = [

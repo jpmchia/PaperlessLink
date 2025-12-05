@@ -91,7 +91,7 @@ export function DashboardWithAnalytics() {
   const [selectedDocumentTypes, setSelectedDocumentTypes] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<number[]>([]);
   const [selectedCorrespondent, setSelectedCorrespondent] = useState<number | null>(null);
-  const [documentsPanelHeight, setDocumentsPanelHeight] = useState<number>(600); // SSR-safe default
+  const [documentsPanelHeight, setDocumentsPanelHeight] = useState<number>(650); // SSR-safe default
   
   // Initialize height from localStorage or calculate 60vh on client mount
   useEffect(() => {

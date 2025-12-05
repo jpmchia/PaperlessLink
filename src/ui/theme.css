@@ -60,15 +60,15 @@
   --color-default-background: rgb(9, 9, 11);
 
   /* Fonts */
-  --text-caption: 12px;
-  --text-caption--font-weight: 400;
+  --text-caption: 11px;
+  --text-caption--font-weight: 500;
   --text-caption--letter-spacing: 0em;
-  --text-caption--line-height: 16px;
-  --text-caption-bold: 12px;
+  --text-caption--line-height: 14px;
+  --text-caption-bold: 11px;
   --text-caption-bold--font-weight: 500;
   --text-caption-bold--letter-spacing: 0em;
-  --text-caption-bold--line-height: 16px;
-  --text-body: 14px;
+  --text-caption-bold--line-height: 14px;
+  --text-body: 12px;
   --text-body--font-weight: 400;
   --text-body--letter-spacing: 0em;
   --text-body--line-height: 20px;
@@ -96,8 +96,8 @@
   /* Font families */
   --font-caption: Figtree;
   --font-caption-bold: Figtree;
-  --font-body: Figtree;
-  --font-body-bold: Figtree;
+  --font-body: Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
+  --font-body-bold: Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
   --font-heading-3: Figtree;
   --font-heading-2: Figtree;
   --font-heading-1: Figtree;

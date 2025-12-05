@@ -21,7 +21,7 @@ const Cell = React.forwardRef<HTMLDivElement, CellProps>(function Cell(
     <td {...otherProps}>
       <div
         className={SubframeUtils.twClassNames(
-          "flex h-12 w-full items-center gap-1 px-3",
+          "flex h-full w-full items-center gap-1 px-2 py-1",
           className
         )}
         ref={ref}
@@ -36,25 +36,30 @@ interface HeaderCellProps
   extends React.ThHTMLAttributes<HTMLTableHeaderCellElement> {
   children?: React.ReactNode;
   icon?: React.ReactNode;
-  className?: string;
 }
 
 const HeaderCell = React.forwardRef<HTMLDivElement, HeaderCellProps>(
   function HeaderCell(
-    { children, icon = null, className, ...otherProps }: HeaderCellProps,
+    { children, icon = null, className: innerDivClassName, ...otherProps }: HeaderCellProps,
     ref
   ) {
+    // className is already part of React.ThHTMLAttributes, so it's in otherProps
+    const thClassName = (otherProps as any).className;
+    const { className: _, ...thProps } = otherProps as any;
     return (
-      <th {...otherProps}>
+      <th 
+        {...thProps} 
+        className={SubframeUtils.twClassNames("border-b border-solid border-neutral-border", thClassName)}
+      >
         <div
           className={SubframeUtils.twClassNames(
             "flex h-8 w-full items-center gap-1 px-3 text-left",
-            className
+            innerDivClassName
           )}
           ref={ref}
         >
           {children ? (
-            <span className="whitespace-nowrap text-caption-bold font-caption-bold text-subtext-color">
+            <span className="whitespace-nowrap text-caption-bold font-caption-bold text-brand-700">
               {children}
             </span>
           ) : null}

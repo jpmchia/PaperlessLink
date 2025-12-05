@@ -20,4 +20,5 @@ export { DocumentNotesService } from './document-notes.service'
 export { LogService } from './log.service'
 export { RemoteVersionService } from './remote-version.service'
 export { ProcessedMailService } from './processed-mail.service'
+export { CustomViewService } from './custom-view.service'
 

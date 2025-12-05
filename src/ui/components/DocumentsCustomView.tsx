@@ -11,10 +11,11 @@ import { EnhancedTable } from "@/ui/components/EnhancedTable";
 import { Button } from "@/ui/components/Button";
 import { IconButton } from "@/ui/components/IconButton";
 import { Badge } from "@/ui/components/Badge";
-import { FeatherMoreHorizontal, FeatherEye, FeatherDownload, FeatherShare2, FeatherTrash } from "@subframe/core";
+import { FeatherMoreHorizontal, FeatherEye, FeatherDownload, FeatherShare2, FeatherTrash, FeatherChevronDown, FeatherSave, FeatherRotateCcw } from "@subframe/core";
 import * as SubframeCore from "@subframe/core";
 import { DropdownMenu } from "@/ui/components/DropdownMenu";
-import { useDocuments, useTags, useCorrespondents, useDocumentTypes, useSettings, useCustomFields } from "@/lib/api/hooks";
+import { useDocuments, useTags, useCorrespondents, useDocumentTypes, useSettings, useCustomFields, useCustomViews } from "@/lib/api/hooks";
+import { CustomView } from "@/app/data/custom-view";
 import { Document } from "@/app/data/document";
 import { SETTINGS_KEYS } from "@/app/data/ui-settings";
 import { CustomField } from "@/app/data/custom-field";
@@ -29,7 +30,7 @@ import { createLookupMaps } from "./documents/documentUtils";
 
 const DEFAULT_PAGE_SIZE = 50;
 
-export function DocumentsPage() {
+export function DocumentsCustomView() {
   const router = useRouter();
   const { delete: deleteDocument, service } = useDocuments();
   
@@ -161,7 +162,35 @@ export function DocumentsPage() {
     return columnFields;
   }, [settings, customFields]);
 
-  // Custom hooks
+  // Custom views
+  const { customViews, isLoading: customViewsLoading, refetch: refetchCustomViews, update: updateCustomView } = useCustomViews();
+  
+  // Selected custom view state
+  const [selectedCustomViewId, setSelectedCustomViewId] = useState<number | string | null>(null);
+  const [appliedCustomView, setAppliedCustomView] = useState<CustomView | null>(null);
+  const [originalColumnSizing, setOriginalColumnSizing] = useState<Record<string, number>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Restore selected view from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedViewId = localStorage.getItem('lastSelectedCustomViewId');
+      if (savedViewId) {
+        try {
+          const numId = parseInt(savedViewId, 10);
+          if (!isNaN(numId)) {
+            setSelectedCustomViewId(numId);
+          } else {
+            setSelectedCustomViewId(savedViewId);
+          }
+        } catch (e) {
+          // Invalid ID, ignore
+        }
+      }
+    }
+  }, []);
+  
+  // Custom hooks - need to be declared before useEffect that uses tableState
   const { filters, filterVisibility, updateFilter } = useDocumentFilters();
   const {
     documents,
@@ -178,6 +207,112 @@ export function DocumentsPage() {
   } = useDocumentList(DEFAULT_PAGE_SIZE);
   
   const tableState = useTableState();
+  
+  // Find and apply the selected custom view
+  useEffect(() => {
+    if (selectedCustomViewId && customViews.length > 0) {
+      const view = customViews.find(v => {
+        if (typeof selectedCustomViewId === 'number' && typeof v.id === 'number') {
+          return v.id === selectedCustomViewId;
+        }
+        return false;
+      });
+      
+      if (view) {
+        setAppliedCustomView(view);
+        // Store original column sizing for revert functionality
+        setOriginalColumnSizing(view.column_sizing || {});
+        // Reset table state column sizing to match the view
+        if (view.column_sizing) {
+          tableState.setColumnSizing(view.column_sizing);
+        }
+        // Persist selection
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lastSelectedCustomViewId', String(selectedCustomViewId));
+        }
+      } else {
+        setAppliedCustomView(null);
+        setOriginalColumnSizing({});
+      }
+    } else {
+      setAppliedCustomView(null);
+      setOriginalColumnSizing({});
+    }
+  }, [selectedCustomViewId, customViews, tableState.setColumnSizing]);
+  
+  // Check if there are unsaved changes to column sizing
+  const hasUnsavedChanges = useMemo(() => {
+    if (!appliedCustomView || !selectedCustomViewId || typeof selectedCustomViewId !== 'number') {
+      return false;
+    }
+    
+    const currentSizing = tableState.columnSizing;
+    const originalSizing = originalColumnSizing;
+    
+    // Check if any values have changed
+    const allKeys = Array.from(new Set([...Object.keys(currentSizing), ...Object.keys(originalSizing)]));
+    
+    for (const key of allKeys) {
+      const current = currentSizing[key] ?? undefined;
+      const original = originalSizing[key] ?? undefined;
+      if (current !== original) {
+        return true;
+      }
+    }
+    
+    return false;
+  }, [appliedCustomView, selectedCustomViewId, tableState.columnSizing, originalColumnSizing]);
+  
+  // Save changes handler
+  const handleSave = useCallback(async () => {
+    if (!appliedCustomView || !selectedCustomViewId || typeof selectedCustomViewId !== 'number') {
+      return;
+    }
+    
+    try {
+      setIsSaving(true);
+      
+      // Convert current column sizing to the format expected by CustomView
+      const updatedColumnSizing: Record<string, number> = {};
+      Object.entries(tableState.columnSizing).forEach(([key, value]) => {
+        if (typeof value === 'number' && value > 0) {
+          updatedColumnSizing[key] = value;
+        }
+      });
+      
+      // Update the custom view
+      await updateCustomView({
+        id: selectedCustomViewId,
+        data: {
+          column_sizing: updatedColumnSizing,
+        },
+      });
+      
+      // Update the original sizing to match the new saved state
+      setOriginalColumnSizing(updatedColumnSizing);
+      
+      // Refetch views to get the latest
+      await refetchCustomViews();
+      
+      // TODO: Show success toast
+    } catch (error) {
+      console.error('Failed to save custom view:', error);
+      // TODO: Show error toast
+    } finally {
+      setIsSaving(false);
+    }
+  }, [appliedCustomView, selectedCustomViewId, tableState.columnSizing, updateCustomView, refetchCustomViews]);
+  
+  // Revert changes handler
+  const handleRevert = useCallback(() => {
+    if (!appliedCustomView || !originalColumnSizing) {
+      return;
+    }
+    
+    // Reset column sizing to original
+    tableState.setColumnSizing(originalColumnSizing);
+  }, [appliedCustomView, originalColumnSizing, tableState.setColumnSizing]);
+  
   
   // Document selection state
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
@@ -221,8 +356,31 @@ export function DocumentsPage() {
     }
   }, [deleteDocument, refetchDocuments, selectedDocument]);
 
-  // Get enabled built-in fields and their widths from settings
+  // Get enabled built-in fields and their widths from custom view or settings
   const { enabledBuiltInFields, builtInFieldWidths } = useMemo(() => {
+    // Use custom view settings if available, otherwise fall back to global settings
+    if (appliedCustomView) {
+      const enabled = new Set<string>();
+      const widths = new Map<string, number>();
+      
+      // Get visibility and widths from custom view
+      ['title', 'modified', 'fileSize', 'category', 'owner'].forEach(fieldId => {
+        const isEnabled = appliedCustomView.column_visibility?.[fieldId] !== false;
+        if (isEnabled) {
+          enabled.add(fieldId);
+          
+          // Get column width from custom view
+          const width = appliedCustomView.column_sizing?.[fieldId];
+          if (width && width > 0) {
+            widths.set(fieldId, width);
+          }
+        }
+      });
+      
+      return { enabledBuiltInFields: enabled, builtInFieldWidths: widths };
+    }
+    
+    // Fall back to global settings
     if (!settings?.settings) {
       // Default: all built-in fields enabled (tags are shown under title, not as separate column)
       return {
@@ -254,7 +412,7 @@ export function DocumentsPage() {
     });
     
     return { enabledBuiltInFields: enabled, builtInFieldWidths: widths };
-  }, [settings]);
+  }, [settings, appliedCustomView]);
 
   // Table columns - memoized
   const baseColumns = useTableColumns({
@@ -266,12 +424,18 @@ export function DocumentsPage() {
     getTagName,
   });
 
-  // Get column order from settings
+  // Get column order from custom view or settings
   const columnOrderFromSettings = useMemo(() => {
+    // Prefer custom view column order
+    if (appliedCustomView?.column_order) {
+      return appliedCustomView.column_order;
+    }
+    
+    // Fall back to global settings
     if (!settings?.settings) return null;
     const settingsObj = settings.settings as Record<string, any>;
     return settingsObj[SETTINGS_KEYS.DOCUMENT_LIST_COLUMN_ORDER] as (string | number)[] | undefined;
-  }, [settings]);
+  }, [settings, appliedCustomView]);
 
   // Add actions column and apply column order
   const columns = useMemo(() => {
@@ -408,8 +572,14 @@ export function DocumentsPage() {
     return columns.map(col => col.id!);
   }, [columns]);
 
-  // Compute column sizing from settings (for both built-in and custom fields)
+  // Compute column sizing from custom view or settings (for both built-in and custom fields)
   const columnSizingFromSettings = useMemo(() => {
+    // Use custom view column sizing if available
+    if (appliedCustomView?.column_sizing) {
+      return { ...appliedCustomView.column_sizing };
+    }
+    
+    // Fall back to global settings
     if (!settings?.settings) return {};
     const settingsObj = settings.settings as Record<string, any>;
     const sizing: Record<string, number> = {};
@@ -440,7 +610,7 @@ export function DocumentsPage() {
     });
     
     return sizing;
-  }, [settings, customFields]);
+  }, [settings, customFields, appliedCustomView]);
   
   // Panel state
   const [panelWidth, setPanelWidth] = useState<number>(768);
@@ -537,9 +707,104 @@ export function DocumentsPage() {
     return getCorrespondentName(selectedDocument.correspondent);
   }, [selectedDocument, getCorrespondentName]);
 
+  // Get selected view name for display
+  const selectedViewName = useMemo(() => {
+    if (!selectedCustomViewId || !customViews.length) return "Select View";
+    const view = customViews.find(v => v.id && typeof v.id === 'number' && v.id === selectedCustomViewId);
+    return view?.name || "Select View";
+  }, [selectedCustomViewId, customViews]);
+
   return (
     <DefaultPageLayout>
       <div className="flex flex-col items-start w-full h-full overflow-hidden">
+        {/* Header with Custom View Selector */}
+        <div className="flex w-full flex-none items-center justify-between gap-4 border-b border-solid border-neutral-border px-6 py-4">
+          <div className="flex items-center gap-4 flex-1">
+            <h1 className="text-heading-2 font-heading-2 text-default-font">Custom Views</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <SubframeCore.DropdownMenu.Root>
+              <SubframeCore.DropdownMenu.Trigger asChild={true}>
+                <Button
+                  variant="neutral-secondary"
+                  size="small"
+                  iconRight={<FeatherChevronDown />}
+                >
+                  {selectedViewName}
+                </Button>
+              </SubframeCore.DropdownMenu.Trigger>
+              <SubframeCore.DropdownMenu.Portal>
+                <SubframeCore.DropdownMenu.Content
+                  side="bottom"
+                  align="start"
+                  sideOffset={4}
+                  asChild={true}
+                >
+                  <DropdownMenu>
+                    {customViews.length === 0 && !customViewsLoading ? (
+                      <DropdownMenu.DropdownItem disabled icon={null}>
+                        No views available
+                      </DropdownMenu.DropdownItem>
+                    ) : customViewsLoading ? (
+                      <DropdownMenu.DropdownItem disabled icon={null}>
+                        Loading views...
+                      </DropdownMenu.DropdownItem>
+                    ) : (
+                      <>
+                        <DropdownMenu.DropdownItem
+                          onClick={() => setSelectedCustomViewId(null)}
+                          icon={null}
+                        >
+                          Default View
+                        </DropdownMenu.DropdownItem>
+                        {customViews.length > 0 && <DropdownMenu.DropdownDivider />}
+                        {customViews.map((view) => {
+                          const viewId = view.id as number | string | undefined;
+                          if (!viewId || typeof viewId === 'string') return null; // Skip drafts
+                          return (
+                            <DropdownMenu.DropdownItem
+                              key={viewId}
+                              onClick={() => setSelectedCustomViewId(viewId)}
+                              icon={null}
+                            >
+                              {view.name}
+                              {view.is_global && " (Global)"}
+                            </DropdownMenu.DropdownItem>
+                          );
+                        })}
+                      </>
+                    )}
+                  </DropdownMenu>
+                </SubframeCore.DropdownMenu.Content>
+              </SubframeCore.DropdownMenu.Portal>
+            </SubframeCore.DropdownMenu.Root>
+            
+            {/* Save and Revert buttons - only show when a custom view is selected */}
+            {appliedCustomView && selectedCustomViewId && typeof selectedCustomViewId === 'number' && (
+              <>
+                <Button
+                  variant="neutral-secondary"
+                  size="small"
+                  icon={<FeatherRotateCcw />}
+                  onClick={handleRevert}
+                  disabled={!hasUnsavedChanges}
+                >
+                  Revert
+                </Button>
+                <Button
+                  variant="brand-primary"
+                  size="small"
+                  icon={<FeatherSave />}
+                  onClick={handleSave}
+                  disabled={!hasUnsavedChanges || isSaving}
+                >
+                  {isSaving ? "Saving..." : "Save"}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+        
         {/* Search and Filters Bar */}
         <FilterBar
           searchQuery={searchQuery}
@@ -571,7 +836,7 @@ export function DocumentsPage() {
             {/* Documents Table Container */}
             <div ref={tableContainerRef} className="w-full flex-1 min-h-0 flex flex-col">
               <EnhancedTable
-                key={`table-${settings?.settings ? JSON.stringify(columnOrderFromSettings) : 'default'}-${JSON.stringify(columnSizingFromSettings)}`}
+                key={`table-${selectedCustomViewId || 'default'}-${JSON.stringify(columnOrderFromSettings)}-${JSON.stringify(columnSizingFromSettings)}`}
                 data={documents}
                 columns={columns}
                 loading={loading}
@@ -580,18 +845,6 @@ export function DocumentsPage() {
                 enableColumnResizing={true}
                 enableColumnReordering={false}
                 enableColumnVisibility={false}
-                renderSubRow={(doc) => {
-                  if (!doc.tags || doc.tags.length === 0) return null;
-                  return (
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {doc.tags.map((tagId) => (
-                        <Badge key={tagId} variant="neutral">
-                          {getTagName(tagId)}
-                        </Badge>
-                      ))}
-                    </div>
-                  );
-                }}
                 initialState={tableInitialState}
                 onStateChange={onStateChange}
               />
@@ -654,3 +907,4 @@ export function DocumentsPage() {
     </DefaultPageLayout>
   );
 }
+
