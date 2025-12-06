@@ -50,8 +50,9 @@ export function PopulatedFilter({
           align="start"
           sideOffset={4}
           asChild={true}
+          style={{ zIndex: 10000 }}
         >
-          <FilterMenu>
+          <FilterMenu className="z-[10000]">
             <FilterMenu.FilterMenuItem
               checked={value === 'all'}
               onCheckedChange={(checked) => {

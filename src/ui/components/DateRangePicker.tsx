@@ -13,10 +13,11 @@ import * as SubframeCore from "@subframe/core";
 interface DateRangePickerProps {
   value?: { start: Date | null; end: Date | null };
   onChange?: (range: { start: Date | null; end: Date | null }) => void;
+  label?: string;
   className?: string;
 }
 
-export function DateRangePicker({ value, onChange, className }: DateRangePickerProps) {
+export function DateRangePicker({ value, onChange, label, className }: DateRangePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [tempStart, setTempStart] = useState<Date | null>(value?.start || null);
   const [tempEnd, setTempEnd] = useState<Date | null>(value?.end || null);
@@ -28,14 +29,15 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
   });
 
   const formatDateRange = () => {
-    if (!tempStart && !tempEnd) return "Select date range";
+    const fieldLabel = label || "Date range";
+    if (!tempStart && !tempEnd) return fieldLabel;
     if (tempStart && !tempEnd) {
       return tempStart.toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' });
     }
     if (tempStart && tempEnd) {
       return `${tempStart.toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' })} - ${tempEnd.toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' })}`;
     }
-    return "Select date range";
+    return fieldLabel;
   };
 
   const handleDateClick = (date: Date, isFirst: boolean) => {
@@ -76,6 +78,11 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
     setTempStart(value?.start || null);
     setTempEnd(value?.end || null);
     setIsOpen(false);
+  };
+
+  const handleClear = () => {
+    setTempStart(null);
+    setTempEnd(null);
   };
 
   const isDateInRange = (date: Date) => {
@@ -231,6 +238,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
     today.setHours(0, 0, 0, 0);
     const newDate = new Date(today);
     
+    // Navigate to today's month
     if (isFirst) {
       setCurrentMonth(newDate);
       const newNext = new Date(newDate);
@@ -239,6 +247,9 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
     } else {
       setNextMonth(newDate);
     }
+    
+    // Select today's date
+    handleDateClick(today, isFirst);
   };
 
   const renderCalendar = (date: Date, isFirst: boolean) => {
@@ -426,8 +437,9 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
           align="start"
           sideOffset={4}
           asChild={true}
+          style={{ zIndex: 10000 }}
         >
-          <div className="flex flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-default-background px-6 py-4 shadow-lg">
+          <div className="flex flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-default-background px-6 py-4 shadow-lg z-[10000]">
             <div className="flex w-full items-center gap-6">
               {renderCalendar(currentMonth, true)}
               {renderCalendar(nextMonth, false)}
@@ -456,6 +468,13 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
                   onClick={handleCancel}
                 >
                   Cancel
+                </Button>
+                <Button
+                  variant="neutral-secondary"
+                  size="small"
+                  onClick={handleClear}
+                >
+                  Clear Filter
                 </Button>
                 <Button
                   variant="brand-primary"

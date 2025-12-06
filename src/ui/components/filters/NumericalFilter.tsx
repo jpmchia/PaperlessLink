@@ -83,8 +83,9 @@ export function NumericalFilter({
           align="start"
           sideOffset={4}
           asChild={true}
+          style={{ zIndex: 10000 }}
         >
-          <div className="flex min-w-[280px] flex-col items-start gap-3 rounded-md border border-solid border-neutral-border bg-default-background px-4 py-3 shadow-lg">
+          <div className="flex min-w-[280px] flex-col items-start gap-3 rounded-md border border-solid border-neutral-border bg-default-background px-4 py-3 shadow-lg z-[10000]">
             <div className="flex w-full items-center justify-between">
               <span className="text-body-bold font-body-bold text-default-font">
                 {label}

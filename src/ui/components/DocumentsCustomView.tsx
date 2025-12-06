@@ -11,7 +11,7 @@ import { EnhancedTable } from "@/ui/components/EnhancedTable";
 import { Button } from "@/ui/components/Button";
 import { IconButton } from "@/ui/components/IconButton";
 import { Badge } from "@/ui/components/Badge";
-import { FeatherMoreHorizontal, FeatherEye, FeatherDownload, FeatherShare2, FeatherTrash, FeatherChevronDown, FeatherSave, FeatherRotateCcw, FeatherColumns, FeatherCopy } from "@subframe/core";
+import { FeatherMoreHorizontal, FeatherEye, FeatherDownload, FeatherShare2, FeatherTrash, FeatherChevronDown, FeatherChevronLeft, FeatherChevronRight, FeatherSave, FeatherRotateCcw, FeatherColumns, FeatherCopy, FeatherFileText } from "@subframe/core";
 import * as SubframeCore from "@subframe/core";
 import { DropdownMenu } from "@/ui/components/DropdownMenu";
 import { useDocuments, useTags, useCorrespondents, useDocumentTypes, useSettings, useCustomFields, useCustomViews } from "@/lib/api/hooks";
@@ -28,6 +28,7 @@ import { FilterBar } from "./documents/FilterBar";
 import { DocumentPreviewPanel } from "./documents/DocumentPreviewPanel";
 import { createLookupMaps } from "./documents/documentUtils";
 import { ColumnVisibilityDropdown } from "./documents/ColumnVisibilityDropdown";
+import { FilterVisibilityDropdown } from "./documents/FilterVisibilityDropdown";
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -129,11 +130,16 @@ export function DocumentsCustomView() {
   const [originalColumnSizing, setOriginalColumnSizing] = useState<Record<string, number>>({});
   const [originalColumnOrder, setOriginalColumnOrder] = useState<(string | number)[]>([]);
   const [originalColumnVisibility, setOriginalColumnVisibility] = useState<Record<string, boolean>>({});
+  const [originalFilterVisibility, setOriginalFilterVisibility] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
   
   // Local state for pending changes (not yet saved)
   const [pendingColumnOrder, setPendingColumnOrder] = useState<(string | number)[] | null>(null);
   const [pendingColumnVisibility, setPendingColumnVisibility] = useState<Record<string, boolean> | null>(null);
+  const [pendingFilterVisibility, setPendingFilterVisibility] = useState<Record<string, boolean> | null>(null);
+  
+  // Ref to track currently applied view ID to prevent infinite loops
+  const appliedViewIdRef = useRef<number | string | null>(null);
   
   // Pin and selection state
   const [pinnedDocuments, setPinnedDocuments] = useState<Set<number>>(new Set());
@@ -302,7 +308,7 @@ export function DocumentsCustomView() {
   }, [settings, customFields, appliedCustomView]);
   
   // Custom hooks - need to be declared before useEffect that uses tableState
-  const { filters, filterVisibility, updateFilter } = useDocumentFilters();
+  const { filters, filterVisibility, updateFilter, updateFilterVisibility } = useDocumentFilters();
   const {
     documents,
     totalCount,
@@ -315,22 +321,30 @@ export function DocumentsCustomView() {
     goToNextPage,
     goToPreviousPage,
     refetch: refetchDocuments,
-  } = useDocumentList(DEFAULT_PAGE_SIZE);
+  } = useDocumentList(DEFAULT_PAGE_SIZE, filters);
   
   const tableState = useTableState();
   
   // Apply the selected custom view - this function applies all view settings to the table
-  const applyCustomView = useCallback((view: CustomView) => {
+  const applyCustomView = useCallback((view: CustomView, skipIfSame = false) => {
+    // Guard: Skip if we're already applying this exact view (prevent infinite loops)
+    if (skipIfSame && appliedViewIdRef.current === view.id) {
+      return;
+    }
+    
+    appliedViewIdRef.current = view.id;
     setAppliedCustomView(view);
     
     // Store original state for revert functionality
     setOriginalColumnSizing(view.column_sizing || {});
     setOriginalColumnOrder(view.column_order || []);
     setOriginalColumnVisibility(view.column_visibility || {});
+    setOriginalFilterVisibility(view.filter_visibility || {});
     
     // Clear pending changes
     setPendingColumnOrder(null);
     setPendingColumnVisibility(null);
+    setPendingFilterVisibility(null);
     
     // Apply column sizing
     if (view.column_sizing) {
@@ -380,29 +394,31 @@ export function DocumentsCustomView() {
     }
   }, [selectedCustomViewId, customViews, applyCustomView]);
   
+  // Handle custom view updates - memoized to prevent infinite loops
+  const handleCustomViewsUpdated = useCallback(async () => {
+    // Refetch custom views to get the latest data
+    const result = await refetchCustomViews();
+    
+    // Re-apply the selected view if one is selected
+    if (selectedCustomViewId && typeof selectedCustomViewId === 'number') {
+      // Use the refetched data from the result (data is already an array from the queryFn)
+      const updatedViews = result.data || [];
+      const view = updatedViews.find(v => {
+        if (typeof v.id === 'number' && v.id === selectedCustomViewId) {
+          return true;
+        }
+        return false;
+      });
+      
+      if (view) {
+        // Skip if it's the same view to prevent infinite loops
+        applyCustomView(view, true);
+      }
+    }
+  }, [selectedCustomViewId, refetchCustomViews, applyCustomView]);
+  
   // Listen for custom view updates (when settings modal closes or views are saved)
   useEffect(() => {
-    const handleCustomViewsUpdated = async () => {
-      // Refetch custom views to get the latest data
-      const result = await refetchCustomViews();
-      
-      // Re-apply the selected view if one is selected
-      if (selectedCustomViewId && typeof selectedCustomViewId === 'number') {
-        // Use the refetched data from the result (data is already an array from the queryFn)
-        const updatedViews = result.data || [];
-        const view = updatedViews.find(v => {
-          if (typeof v.id === 'number' && v.id === selectedCustomViewId) {
-            return true;
-          }
-          return false;
-        });
-        
-        if (view) {
-          applyCustomView(view);
-        }
-      }
-    };
-    
     // Listen for customViewsUpdated event (dispatched when settings modal closes)
     window.addEventListener('customViewsUpdated', handleCustomViewsUpdated);
     
@@ -417,12 +433,15 @@ export function DocumentsCustomView() {
     };
     window.addEventListener('storage', handleStorageChange);
     
-    // Check localStorage on mount for any pending updates
+    // Check localStorage on mount for any pending updates (only once)
     if (typeof window !== 'undefined') {
       const customViewsUpdated = localStorage.getItem('customViewsUpdated');
       if (customViewsUpdated) {
-        handleCustomViewsUpdated();
-        localStorage.removeItem('customViewsUpdated');
+        // Use setTimeout to avoid calling during render
+        setTimeout(() => {
+          handleCustomViewsUpdated();
+          localStorage.removeItem('customViewsUpdated');
+        }, 0);
       }
     }
     
@@ -431,7 +450,7 @@ export function DocumentsCustomView() {
       window.removeEventListener('settingsSaved', handleCustomViewsUpdated);
       window.removeEventListener('storage', handleStorageChange);
     };
-  }, [selectedCustomViewId, refetchCustomViews, applyCustomView]);
+  }, [handleCustomViewsUpdated]);
   
   // Get column order from custom view or settings (use pending if available) - declare before hasUnsavedChanges
   const columnOrderFromSettings = useMemo(() => {
@@ -463,7 +482,21 @@ export function DocumentsCustomView() {
     return {};
   }, [appliedCustomView, pendingColumnVisibility]);
 
-  // Check if there are unsaved changes (sizing, order, or visibility)
+  // Get filter visibility from custom view or settings (use pending if available)
+  const filterVisibilityFromSettings = useMemo(() => {
+    // Prefer pending changes, then custom view filter visibility
+    if (pendingFilterVisibility !== null) {
+      return pendingFilterVisibility;
+    }
+    if (appliedCustomView?.filter_visibility) {
+      return appliedCustomView.filter_visibility;
+    }
+    
+    // Fall back to empty object (no filters visible by default)
+    return {};
+  }, [appliedCustomView, pendingFilterVisibility]);
+
+  // Check if there are unsaved changes (sizing, order, visibility, or filter visibility)
   const hasUnsavedChanges = useMemo(() => {
     if (!appliedCustomView || !selectedCustomViewId || typeof selectedCustomViewId !== 'number') {
       return false;
@@ -500,8 +533,20 @@ export function DocumentsCustomView() {
       }
     }
     
+    // Check filter visibility changes
+    const currentFilterVisibility = filterVisibilityFromSettings;
+    const originalFilterVis = originalFilterVisibility;
+    const allFilterVisibilityKeys = Array.from(new Set([...Object.keys(currentFilterVisibility), ...Object.keys(originalFilterVis)]));
+    for (const key of allFilterVisibilityKeys) {
+      const current = currentFilterVisibility[key] ?? false;
+      const original = originalFilterVis[key] ?? false;
+      if (current !== original) {
+        return true;
+      }
+    }
+    
     return false;
-  }, [appliedCustomView, selectedCustomViewId, tableState.columnSizing, originalColumnSizing, pendingColumnOrder, columnOrderFromSettings, originalColumnOrder, pendingColumnVisibility, columnVisibilityFromSettings, originalColumnVisibility]);
+  }, [appliedCustomView, selectedCustomViewId, tableState.columnSizing, originalColumnSizing, pendingColumnOrder, columnOrderFromSettings, originalColumnOrder, pendingColumnVisibility, columnVisibilityFromSettings, originalColumnVisibility, filterVisibilityFromSettings, originalFilterVisibility]);
   
   // Save changes handler
   const handleSave = useCallback(async () => {
@@ -520,9 +565,10 @@ export function DocumentsCustomView() {
         }
       });
       
-      // Get pending order and visibility, or use current
+      // Get pending order, visibility, and filter visibility, or use current
       const updatedOrder = pendingColumnOrder ?? appliedCustomView.column_order ?? [];
       const updatedVisibility = pendingColumnVisibility ?? appliedCustomView.column_visibility ?? {};
+      const updatedFilterVisibility = pendingFilterVisibility ?? appliedCustomView.filter_visibility ?? {};
       
       // Update the custom view
       await updateCustomView({
@@ -531,6 +577,7 @@ export function DocumentsCustomView() {
           column_sizing: updatedColumnSizing,
           column_order: updatedOrder,
           column_visibility: updatedVisibility,
+          filter_visibility: updatedFilterVisibility,
         },
       });
       
@@ -538,10 +585,12 @@ export function DocumentsCustomView() {
       setOriginalColumnSizing(updatedColumnSizing);
       setOriginalColumnOrder(updatedOrder);
       setOriginalColumnVisibility(updatedVisibility);
+      setOriginalFilterVisibility(updatedFilterVisibility);
       
       // Clear pending changes
       setPendingColumnOrder(null);
       setPendingColumnVisibility(null);
+      setPendingFilterVisibility(null);
       
       // Refetch views to get the latest
       await refetchCustomViews();
@@ -553,7 +602,7 @@ export function DocumentsCustomView() {
     } finally {
       setIsSaving(false);
     }
-  }, [appliedCustomView, selectedCustomViewId, tableState.columnSizing, pendingColumnOrder, pendingColumnVisibility, updateCustomView, refetchCustomViews]);
+  }, [appliedCustomView, selectedCustomViewId, tableState.columnSizing, pendingColumnOrder, pendingColumnVisibility, pendingFilterVisibility, updateCustomView, refetchCustomViews]);
   
   // Revert changes handler
   const handleRevert = useCallback(() => {
@@ -576,10 +625,20 @@ export function DocumentsCustomView() {
     });
     tableState.setColumnVisibility(visibilityForTable);
     
+    // Reset filter visibility to original
+    // Note: Filter visibility is managed through the custom view, so we'll need to re-apply the view
+    // For now, clear pending changes and let the view re-apply
+    setPendingFilterVisibility(null);
+    
     // Clear pending changes
     setPendingColumnOrder(null);
     setPendingColumnVisibility(null);
-  }, [appliedCustomView, originalColumnSizing, originalColumnOrder, originalColumnVisibility, tableState.setColumnSizing, tableState.setColumnOrder, tableState.setColumnVisibility]);
+    
+    // Re-apply the view to restore filter visibility
+    if (appliedCustomView) {
+      applyCustomView(appliedCustomView, false);
+    }
+  }, [appliedCustomView, originalColumnSizing, originalColumnOrder, originalColumnVisibility, tableState.setColumnSizing, tableState.setColumnOrder, tableState.setColumnVisibility, applyCustomView]);
 
   // Save As handler - creates a new view with current changes
   const handleSaveAs = useCallback(async () => {
@@ -603,9 +662,10 @@ export function DocumentsCustomView() {
         }
       });
       
-      // Get pending order and visibility, or use current
+      // Get pending order, visibility, and filter visibility, or use current
       const updatedOrder = pendingColumnOrder ?? appliedCustomView.column_order ?? [];
       const updatedVisibility = pendingColumnVisibility ?? appliedCustomView.column_visibility ?? {};
+      const updatedFilterVisibility = pendingFilterVisibility ?? appliedCustomView.filter_visibility ?? {};
       
       // Create new view with current settings
       const newView = await createCustomView({
@@ -616,8 +676,10 @@ export function DocumentsCustomView() {
         column_visibility: updatedVisibility,
         column_sizing: updatedColumnSizing,
         column_display_types: appliedCustomView.column_display_types || {},
-        filters: appliedCustomView.filters || {},
-        sort_order: appliedCustomView.sort_order || [],
+        filter_rules: appliedCustomView.filter_rules,
+        filter_visibility: updatedFilterVisibility,
+        sort_field: appliedCustomView.sort_field,
+        sort_reverse: appliedCustomView.sort_reverse,
       });
       
       // Refetch views to get the latest
@@ -635,7 +697,7 @@ export function DocumentsCustomView() {
     } finally {
       setIsSaving(false);
     }
-  }, [appliedCustomView, tableState.columnSizing, pendingColumnOrder, pendingColumnVisibility, createCustomView, refetchCustomViews]);
+  }, [appliedCustomView, tableState.columnSizing, pendingColumnOrder, pendingColumnVisibility, pendingFilterVisibility, createCustomView, refetchCustomViews]);
   
   // Document selection state
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
@@ -839,7 +901,7 @@ export function DocumentsCustomView() {
                   align="end"
                   sideOffset={8}
                   asChild={true}
-                  style={{ zIndex: 100 }}
+                  style={{ zIndex: 10000 }}
                 >
                   <DropdownMenu>
                     <DropdownMenu.DropdownItem
@@ -1117,11 +1179,64 @@ export function DocumentsCustomView() {
     <DefaultPageLayout>
       <div className="flex flex-col items-start w-full h-full overflow-hidden">
         {/* Header with Custom View Selector */}
-        <div className="flex w-full flex-none items-center justify-between gap-4 border-b border-solid border-neutral-border px-6 py-4">
+        <div className="flex w-full flex-none items-center justify-between gap-4 px-6 pt-4 pb-2">
           <div className="flex items-center gap-4 flex-1">
-            <h1 className="text-heading-2 font-heading-2 text-default-font">Custom Views</h1>
+            <h2 className="text-heading-2 font-heading-2 text-default-font">{selectedViewName}</h2>
+            <h2 className="text-heading-3 font-heading-3 text-default-font text-subtext-color">(Custom View)</h2>
           </div>
+          
           <div className="flex items-center gap-2">
+            {/* Export Button */}
+            <Button
+              variant="neutral-tertiary"
+              size="medium"
+              icon={<FeatherDownload />}
+              onClick={handleExport}
+            >
+              Export
+            </Button>
+            
+            {/* Vertical Separator */}
+            <div className="flex items-center gap-2 px-2">
+            <div className="h-6 w-px bg-neutral-border" />
+            </div>
+            {/* Filter Visibility Dropdown */}
+            <FilterVisibilityDropdown
+              filterVisibility={filterVisibility}
+              onVisibilityChange={(key, visible) => {
+                // Update the filter visibility state
+                updateFilterVisibility[key](visible);
+                
+                // Also track as pending change for custom views
+                if (appliedCustomView && selectedCustomViewId && typeof selectedCustomViewId === 'number') {
+                  // Store built-in filter visibility in pendingFilterVisibility using the same key
+                  const currentFilterVisibility = pendingFilterVisibility ?? appliedCustomView.filter_visibility ?? {};
+                  const updatedFilterVisibility = {
+                    ...currentFilterVisibility,
+                    [key]: visible,
+                  };
+                  
+                  setPendingFilterVisibility(updatedFilterVisibility);
+                }
+              }}
+              customFields={customFields}
+              appliedCustomView={appliedCustomView}
+              settings={settings}
+              onCustomFieldVisibilityChange={(fieldId, visible) => {
+                // Update pending filter visibility (don't save immediately)
+                if (appliedCustomView && selectedCustomViewId && typeof selectedCustomViewId === 'number') {
+                  const filterKey = `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_PREFIX}${fieldId}`;
+                  const currentFilterVisibility = pendingFilterVisibility ?? appliedCustomView.filter_visibility ?? {};
+                  const updatedFilterVisibility = {
+                    ...currentFilterVisibility,
+                    [filterKey]: visible,
+                  };
+                  
+                  setPendingFilterVisibility(updatedFilterVisibility);
+                }
+              }}
+            />
+            
             {/* Column Visibility/Order Dropdown - only show when a custom view is selected */}
             {appliedCustomView && selectedCustomViewId && typeof selectedCustomViewId === 'number' && (
               <ColumnVisibilityDropdown
@@ -1137,7 +1252,7 @@ export function DocumentsCustomView() {
               <SubframeCore.DropdownMenu.Trigger asChild={true}>
                 <Button
                   variant="neutral-secondary"
-                  size="small"
+                  size="medium"
                   iconRight={<FeatherChevronDown />}
                 >
                   {selectedViewName}
@@ -1149,7 +1264,7 @@ export function DocumentsCustomView() {
                   align="start"
                   sideOffset={4}
                   asChild={true}
-                  style={{ zIndex: 100 }}
+                  style={{ zIndex: 10000 }}
                 >
                   <DropdownMenu>
                     {customViews.length === 0 && !customViewsLoading ? (
@@ -1195,7 +1310,7 @@ export function DocumentsCustomView() {
               <>
                 <Button
                   variant="neutral-secondary"
-                  size="small"
+                  size="medium"
                   icon={<FeatherRotateCcw />}
                   onClick={handleRevert}
                   disabled={!hasUnsavedChanges}
@@ -1204,7 +1319,7 @@ export function DocumentsCustomView() {
                 </Button>
                 <Button
                   variant="neutral-secondary"
-                  size="small"
+                  size="medium"
                   icon={<FeatherCopy />}
                   onClick={handleSaveAs}
                   disabled={isSaving}
@@ -1213,7 +1328,7 @@ export function DocumentsCustomView() {
                 </Button>
                 <Button
                   variant="brand-primary"
-                  size="small"
+                  size="medium"
                   icon={<FeatherSave />}
                   onClick={handleSave}
                   disabled={!hasUnsavedChanges || isSaving}
@@ -1222,6 +1337,20 @@ export function DocumentsCustomView() {
                 </Button>
               </>
             )}
+            
+            {/* Vertical Separator */}
+            <div className="flex items-center gap-2 px-2">
+            <div className="h-6 w-px bg-neutral-border" />
+            </div>
+            {/* Preview Toggle Button */}
+            <Button
+              variant="neutral-secondary"
+              size="medium"
+              icon={<FeatherFileText />}
+              iconRight={isPanelVisible ? <FeatherChevronRight /> : <FeatherChevronLeft />}
+              onClick={() => setIsPanelVisible(!isPanelVisible)}
+              title={isPanelVisible ? "Hide preview panel" : "Show preview panel"}
+            />
           </div>
         </div>
         
@@ -1235,9 +1364,10 @@ export function DocumentsCustomView() {
           documentTypes={documentTypes}
           correspondents={correspondents}
           tags={tags}
-          isPanelVisible={isPanelVisible}
-          onTogglePanel={() => setIsPanelVisible(!isPanelVisible)}
-          onExport={handleExport}
+          customFields={customFields}
+          appliedCustomView={appliedCustomView}
+          settings={settings}
+          pendingFilterVisibility={pendingFilterVisibility}
           onAddDocument={handleAddDocument}
           filterBarRef={filterBarRef}
         />

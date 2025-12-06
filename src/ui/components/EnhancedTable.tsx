@@ -170,7 +170,7 @@ export function EnhancedTable<TData extends Record<string, any>>({
               );
             })}
           </colgroup>
-          <thead className="sticky top-0 z-[5] bg-default-background">
+          <thead className="sticky top-0 z-[1] bg-default-background">
             {table.getHeaderGroups().map((headerGroup) => (
               <Table.HeaderRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
@@ -190,8 +190,8 @@ export function EnhancedTable<TData extends Record<string, any>>({
                         position: "relative",
                       }}
                     >
-                      <div className="flex items-center gap-1 w-full min-w-0">
-                        <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
+                      <div className="flex items-center gap-1 w-full min-w-0 relative">
+                        <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden pr-2">
                           <div className="truncate">
                             {header.isPlaceholder
                               ? null
@@ -225,20 +225,24 @@ export function EnhancedTable<TData extends Record<string, any>>({
                         {enableColumnResizing && header.column.getCanResize() && (
                           <div
                             onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
                               header.getResizeHandler()(e);
                             }}
                             onTouchStart={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
                               header.getResizeHandler()(e);
                             }}
-                            className={`absolute right-0 top-0 h-full w-1 bg-transparent hover:bg-brand-600 cursor-col-resize flex-shrink-0 z-20 ${
+                            className={`absolute right-0 top-0 h-full bg-transparent hover:bg-brand-600 cursor-col-resize flex-shrink-0 z-30 ${
                               isResizing ? "bg-brand-600" : ""
                             }`}
                             style={{
                               userSelect: "none",
                               touchAction: "none",
                               pointerEvents: "auto",
-                              width: "4px",
-                              marginRight: "-2px",
+                              width: "6px",
+                              marginRight: "-3px",
                               cursor: "col-resize",
                             }}
                           />
@@ -299,7 +303,7 @@ export function EnhancedTable<TData extends Record<string, any>>({
                         return (
                           <Table.Cell
                             key={cell.id}
-                            className="overflow-hidden"
+                            className={cell.column.id === 'title' ? "overflow-visible" : "overflow-hidden"}
                             style={{
                               width: `${cell.column.getSize()}px`,
                               minWidth: `${cell.column.getSize()}px`,
@@ -307,7 +311,7 @@ export function EnhancedTable<TData extends Record<string, any>>({
                             }}
                             rowSpan={shouldSpanTwoRows ? 2 : undefined}
                           >
-                            <div className="min-w-0 overflow-hidden">
+                            <div className={cell.column.id === 'title' ? "min-w-0" : "min-w-0 overflow-hidden"}>
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
                             </div>
                           </Table.Cell>

@@ -71,11 +71,11 @@
   --text-body: 12px;
   --text-body--font-weight: 400;
   --text-body--letter-spacing: 0em;
-  --text-body--line-height: 20px;
-  --text-body-bold: 14px;
+  --text-body--line-height: 16px;
+  --text-body-bold: 12px;
   --text-body-bold--font-weight: 500;
   --text-body-bold--letter-spacing: 0em;
-  --text-body-bold--line-height: 20px;
+  --text-body-bold--line-height: 16px;
   --text-heading-3: 16px;
   --text-heading-3--font-weight: 300;
   --text-heading-3--letter-spacing: 0em;

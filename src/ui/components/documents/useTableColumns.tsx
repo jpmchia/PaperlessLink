@@ -51,14 +51,14 @@ export function useTableColumns({
         header: "Document Name",
         enableSorting: true,
         enableResizing: true,
-        minSize: builtInFieldWidths.get('title') || 200,
-        size: builtInFieldWidths.get('title'),
+        minSize: 100,
+        size: builtInFieldWidths.get('title') || 200,
         cell: ({ row }) => {
           const doc = row.original;
           return (
-            <div className="flex items-center gap-2 min-w-0">
-              <FeatherFileText className="text-heading-3 font-heading-3 text-error-600 flex-shrink-0" />
-              <span className="truncate text-body-bold font-body-bold text-default-font">
+            <div className="flex items-start gap-2 min-w-0">
+              <FeatherFileText className="text-heading-3 font-heading-3 text-error-600 flex-shrink-0 mt-0.5" />
+              <span className="text-body-bold font-body-bold text-default-font break-words whitespace-normal">
                 {doc.title || doc.original_file_name || `Document ${doc.id}`}
               </span>
             </div>

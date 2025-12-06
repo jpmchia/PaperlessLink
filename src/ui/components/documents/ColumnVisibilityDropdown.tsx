@@ -137,7 +137,7 @@ export function ColumnVisibilityDropdown({
       <SubframeCore.DropdownMenu.Trigger asChild={true}>
         <Button
           variant="neutral-secondary"
-          size="small"
+          size="medium"
           icon={<FeatherColumns />}
           iconRight={<FeatherChevronDown />}
         >
@@ -150,7 +150,7 @@ export function ColumnVisibilityDropdown({
           align="end"
           sideOffset={4}
           asChild={true}
-          style={{ width: '280px', maxHeight: '400px', overflowY: 'auto', zIndex: 100 }}
+          style={{ width: '280px', maxHeight: '400px', overflowY: 'auto', zIndex: 10000 }}
         >
           <DropdownMenu>
             {orderedColumns.map((column) => {

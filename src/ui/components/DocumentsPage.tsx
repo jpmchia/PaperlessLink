@@ -11,7 +11,7 @@ import { EnhancedTable } from "@/ui/components/EnhancedTable";
 import { Button } from "@/ui/components/Button";
 import { IconButton } from "@/ui/components/IconButton";
 import { Badge } from "@/ui/components/Badge";
-import { FeatherMoreHorizontal, FeatherEye, FeatherDownload, FeatherShare2, FeatherTrash } from "@subframe/core";
+import { FeatherMoreHorizontal, FeatherEye, FeatherDownload, FeatherShare2, FeatherTrash, FeatherChevronLeft, FeatherChevronRight, FeatherFileText } from "@subframe/core";
 import * as SubframeCore from "@subframe/core";
 import { DropdownMenu } from "@/ui/components/DropdownMenu";
 import { useDocuments, useTags, useCorrespondents, useDocumentTypes, useSettings, useCustomFields } from "@/lib/api/hooks";
@@ -588,6 +588,18 @@ export function DocumentsPage() {
   return (
     <DefaultPageLayout>
       <div className="flex flex-col items-start w-full h-full overflow-hidden">
+        {/* Header with Preview Toggle */}
+        <div className="flex w-full flex-none items-center justify-end gap-2 border-b border-solid border-neutral-border px-6 py-4">
+          <Button
+            variant="neutral-secondary"
+            size="medium"
+            icon={<FeatherFileText />}
+            iconRight={isPanelVisible ? <FeatherChevronRight /> : <FeatherChevronLeft />}
+            onClick={() => setIsPanelVisible(!isPanelVisible)}
+            title={isPanelVisible ? "Hide preview panel" : "Show preview panel"}
+          />
+        </div>
+        
         {/* Search and Filters Bar */}
         <FilterBar
           searchQuery={searchQuery}
@@ -598,9 +610,6 @@ export function DocumentsPage() {
           documentTypes={documentTypes}
           correspondents={correspondents}
           tags={tags}
-          isPanelVisible={isPanelVisible}
-          onTogglePanel={() => setIsPanelVisible(!isPanelVisible)}
-          onExport={handleExport}
           onAddDocument={handleAddDocument}
           filterBarRef={filterBarRef}
         />

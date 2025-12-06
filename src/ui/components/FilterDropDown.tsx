@@ -127,12 +127,13 @@ export function FilterDropDown({
       </SubframeCore.DropdownMenu.Trigger>
       <SubframeCore.DropdownMenu.Portal>
         <SubframeCore.DropdownMenu.Content
+          style={{ zIndex: 10000 }}
           side="bottom"
           align="start"
           sideOffset={4}
           asChild={true}
         >
-          <FilterMenu>
+          <FilterMenu className="z-[10000]">
             {showAllOption && (
               <>
                 <FilterMenu.FilterMenuItem

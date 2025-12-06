@@ -11,6 +11,11 @@ export interface DocumentFilters {
   owner: string[];
   status: string[];
   asn: number[];
+  // Custom field filters: fieldId -> filter value
+  customFields: Record<number, {
+    type: string; // filter type: 'populated', 'date-range', 'multi-select', etc.
+    value: any; // filter value (depends on type)
+  }>;
 }
 
 export interface FilterVisibility {
@@ -54,6 +59,7 @@ export function useDocumentFilters() {
     owner: [],
     status: [],
     asn: [],
+    customFields: {},
   });
 
   // Load filter visibility from settings
@@ -99,12 +105,53 @@ export function useDocumentFilters() {
     asn: (value: number[]) => {
       setFilters(prev => ({ ...prev, asn: value }));
     },
+    customField: (fieldId: number, filterType: string, value: any) => {
+      setFilters(prev => {
+        const newCustomFields = { ...prev.customFields };
+        if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) {
+          // Remove filter if value is empty
+          delete newCustomFields[fieldId];
+        } else {
+          newCustomFields[fieldId] = { type: filterType, value };
+        }
+        return { ...prev, customFields: newCustomFields };
+      });
+    },
+  }), []);
+
+  // Update filter visibility
+  const updateFilterVisibility = useMemo(() => ({
+    dateRange: (visible: boolean) => {
+      setFilterVisibility(prev => ({ ...prev, dateRange: visible }));
+    },
+    category: (visible: boolean) => {
+      setFilterVisibility(prev => ({ ...prev, category: visible }));
+    },
+    correspondent: (visible: boolean) => {
+      setFilterVisibility(prev => ({ ...prev, correspondent: visible }));
+    },
+    tags: (visible: boolean) => {
+      setFilterVisibility(prev => ({ ...prev, tags: visible }));
+    },
+    storagePath: (visible: boolean) => {
+      setFilterVisibility(prev => ({ ...prev, storagePath: visible }));
+    },
+    owner: (visible: boolean) => {
+      setFilterVisibility(prev => ({ ...prev, owner: visible }));
+    },
+    status: (visible: boolean) => {
+      setFilterVisibility(prev => ({ ...prev, status: visible }));
+    },
+    asn: (visible: boolean) => {
+      setFilterVisibility(prev => ({ ...prev, asn: visible }));
+    },
   }), []);
 
   return {
     filters,
     filterVisibility,
     updateFilter,
+    updateFilterVisibility,
   };
 }
 
