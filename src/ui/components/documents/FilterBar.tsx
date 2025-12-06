@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useCallback } from 'react';
 import { TextField } from "@/ui/components/TextField";
 import { DateRangePicker } from "@/ui/components/DateRangePicker";
 import { FilterDropDown } from "@/ui/components/FilterDropDown";
@@ -271,6 +271,7 @@ export const FilterBar = memo<FilterBarProps>(({
               fieldName={field.name}
               filterType={filterType}
               currentFilterValue={currentFilterValue}
+              selectOptions={field.extra_data?.select_options || []}
               onSelectionChange={(ids) => {
                 updateFilter.customField(field.id!, filterType, ids.length > 0 ? ids : null);
               }}
@@ -303,27 +304,129 @@ function CustomFieldSelectFilter({
   fieldName,
   filterType,
   currentFilterValue,
+  selectOptions = [],
   onSelectionChange,
 }: {
   fieldId: number;
   fieldName: string;
   filterType: string;
   currentFilterValue: any;
+  selectOptions?: Array<{ id: string; label: string }>;
   onSelectionChange: (ids: (string | number)[]) => void;
 }) {
   const { values, loading } = useCustomFieldValues(fieldId);
   
-  // Convert API values to FilterOption format
-  const fieldOptions = useMemo(() => {
-    return values.map((val) => ({
-      id: val.id,
-      label: val.label,
-      count: val.count,
-    }));
-  }, [values]);
+  // Create maps for lookup: ID -> label and label -> ID (for backwards compatibility)
+  const selectOptionMap = useMemo(() => {
+    const idToLabelMap = new Map<string, string>();
+    const labelToIdMap = new Map<string, string>();
+    
+    if (selectOptions && Array.isArray(selectOptions)) {
+      selectOptions
+        .filter(opt => opt != null && opt !== undefined) // Filter out null/undefined
+        .forEach(opt => {
+          if (opt.id && opt.label) {
+            const id = String(opt.id);
+            const label = String(opt.label);
+            idToLabelMap.set(id, label);
+            labelToIdMap.set(label.toLowerCase(), id); // Case-insensitive lookup for backwards compatibility
+          }
+        });
+    }
+    
+    return { idToLabel: idToLabelMap, labelToId: labelToIdMap };
+  }, [selectOptions]);
   
-  const selectedIds = Array.isArray(currentFilterValue) ? currentFilterValue : 
-                     currentFilterValue ? [currentFilterValue] : [];
+  // Convert API values to FilterOption format
+  // API returns select option IDs as labels, so we need to map them to actual labels
+  const fieldOptions = useMemo(() => {
+    if (!values || values.length === 0) {
+      return [];
+    }
+    
+    const options = values.map((val) => {
+      // The API's "label" field actually contains the select option ID (or sometimes the old label value)
+      // The API's "id" field is an internal value ID (like "val-4235291381520459507")
+      const selectOptionIdOrLabel = String(val.label || val.id);
+      
+      // First, try to find by ID (new format - API returns select option ID in label field)
+      let actualLabel = selectOptionMap.idToLabel.get(selectOptionIdOrLabel);
+      let actualId = selectOptionIdOrLabel;
+      
+      // If not found by ID, try to find by label (API might return actual label value)
+      if (!actualLabel) {
+        const foundId = selectOptionMap.labelToId.get(selectOptionIdOrLabel.toLowerCase());
+        if (foundId) {
+          actualId = foundId;
+          actualLabel = selectOptionMap.idToLabel.get(foundId) || selectOptionIdOrLabel;
+        } else {
+          // Still not found - might be an old value or missing option
+          // Only log warning if we have select options defined (to avoid noise for dynamic fields)
+          if (selectOptionMap.idToLabel.size > 0) {
+            console.warn(`[CustomFieldSelectFilter] Field "${fieldName}" (${fieldId}): Could not find label for value "${selectOptionIdOrLabel}". Available options:`, 
+              Array.from(selectOptionMap.idToLabel.entries()).map(([id, label]) => `${id} -> ${label}`)
+            );
+          }
+          actualLabel = selectOptionIdOrLabel; // Use the value itself as the label
+        }
+      }
+      
+      // Use the select option ID as the filter ID (this is what's stored in filters)
+      // This matches what's in the custom field's select_options
+      return {
+        id: actualId,
+        label: actualLabel,
+        count: val.count,
+      };
+    });
+    
+    return options;
+  }, [values, selectOptionMap, fieldName, fieldId]);
+  
+  // Normalize selected IDs to strings to match the options
+  const selectedIds = useMemo(() => {
+    if (!currentFilterValue) {
+      return [];
+    }
+    if (Array.isArray(currentFilterValue)) {
+      return currentFilterValue.map(id => String(id));
+    }
+    return [String(currentFilterValue)];
+  }, [currentFilterValue]);
+  
+  // Debug: Log when values don't match and show what's being displayed
+  React.useEffect(() => {
+    if (selectedIds.length > 0 && !loading) {
+      const matchedOptions = selectedIds
+        .map(id => {
+          const opt = fieldOptions.find(opt => String(opt.id) === String(id));
+          return { id, option: opt };
+        });
+      
+      const unmatchedIds = matchedOptions.filter(m => !m.option).map(m => m.id);
+      const matched = matchedOptions.filter(m => m.option);
+      
+      console.log(`[CustomFieldSelectFilter] Field "${fieldName}" (${fieldId}):`, {
+        selectedIds,
+        matched: matched.map(m => ({ id: m.id, label: m.option!.label })),
+        unmatchedIds,
+        availableOptions: fieldOptions.map(opt => ({ id: opt.id, label: opt.label })),
+        currentFilterValue,
+        valuesFromAPI: values,
+      });
+      
+      if (unmatchedIds.length > 0) {
+        console.warn(`[CustomFieldSelectFilter] Field "${fieldName}" (${fieldId}): Selected IDs not found in options:`, unmatchedIds);
+      }
+    }
+  }, [selectedIds, fieldOptions, loading, fieldName, fieldId, currentFilterValue, values]);
+  
+  // Handle selection change - convert back to original format if needed
+  const handleSelectionChange = useCallback((ids: (string | number)[]) => {
+    // Convert string IDs back to the format expected by the filter
+    // Keep as strings since API uses strings
+    onSelectionChange(ids.map(id => String(id)));
+  }, [onSelectionChange]);
   
   return (
     <FilterDropDown
@@ -331,7 +434,7 @@ function CustomFieldSelectFilter({
       icon={<FeatherListFilter />}
       options={fieldOptions}
       selectedIds={selectedIds}
-      onSelectionChange={onSelectionChange}
+      onSelectionChange={handleSelectionChange}
       multiSelect={filterType === 'multi-select'}
       showAllOption={true}
       allOptionLabel={`All ${fieldName}`}

@@ -84,6 +84,15 @@ export function useCustomViewActions({
       const updatedVisibility = pendingColumnVisibility ?? appliedCustomView.column_visibility ?? {};
       const updatedFilterVisibility = pendingFilterVisibility ?? appliedCustomView.filter_visibility ?? {};
       
+      // Debug: Log what we're saving
+      console.log('[useCustomViewActions] Saving custom view:', {
+        viewId: selectedCustomViewId,
+        viewName: appliedCustomView.name,
+        pendingFilterVisibility,
+        appliedCustomViewFilterVisibility: appliedCustomView.filter_visibility,
+        updatedFilterVisibility,
+      });
+      
       // Update the custom view
       await updateCustomView({
         id: selectedCustomViewId,
@@ -106,7 +115,8 @@ export function useCustomViewActions({
       setPendingColumnVisibility(null);
       setPendingFilterVisibility(null);
       
-      // Refetch views to get the latest
+      // Refetch views to get the latest - this will trigger the useEffect in useCustomViewManagement
+      // which will automatically re-apply the selected view
       await refetchCustomViews();
       
       // TODO: Show success toast

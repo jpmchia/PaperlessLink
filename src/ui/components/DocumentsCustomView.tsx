@@ -11,7 +11,7 @@ import { Button } from "@/ui/components/Button";
 import { useTags, useCorrespondents, useDocumentTypes, useSettings, useCustomFields } from "@/lib/api/hooks";
 import { SETTINGS_KEYS } from "@/app/data/ui-settings";
 import { CustomView } from "@/app/data/custom-view";
-import { useDocumentFilters } from "./documents/useDocumentFilters";
+import { useDocumentFilters, FilterVisibility } from "./documents/useDocumentFilters";
 import { useDocumentList } from "./documents/useDocumentList";
 import { useTableState } from "./documents/useTableState";
 import { useTableColumns } from "./documents/useTableColumns";
@@ -123,7 +123,55 @@ export function DocumentsCustomView() {
     return {};
   }, [appliedCustomView, pendingFilterVisibility]);
 
-  const { filters, filterVisibility, updateFilter, updateFilterVisibility } = useDocumentFilters();
+  const { filters, filterVisibility: globalFilterVisibility, updateFilter, updateFilterVisibility } = useDocumentFilters();
+  
+  // Compute effective filter visibility: merge custom view settings with global defaults
+  const effectiveFilterVisibility = useMemo(() => {
+    // Start with global filter visibility as defaults
+    const effective: FilterVisibility = { ...globalFilterVisibility };
+    
+    // Override with custom view filter visibility if available
+    if (appliedCustomView?.filter_visibility || pendingFilterVisibility !== null) {
+      const customViewFilterVisibility = pendingFilterVisibility ?? appliedCustomView?.filter_visibility ?? {};
+      
+      // Debug: Log what we're working with
+      console.log('[DocumentsCustomView] Computing effectiveFilterVisibility:', {
+        appliedCustomView: appliedCustomView?.name,
+        appliedCustomViewId: appliedCustomView?.id,
+        customViewFilterVisibility,
+        pendingFilterVisibility,
+        globalFilterVisibility,
+        hasFilterVisibility: !!appliedCustomView?.filter_visibility,
+        filterVisibilityKeys: appliedCustomView?.filter_visibility ? Object.keys(appliedCustomView.filter_visibility) : [],
+      });
+      
+      // Map custom view filter visibility keys to FilterVisibility keys
+      // The custom view uses keys like "storagePath", "owner", "asn", etc.
+      const filterKeys: Array<keyof FilterVisibility> = ['dateRange', 'category', 'correspondent', 'tags', 'storagePath', 'owner', 'status', 'asn'];
+      filterKeys.forEach((filterKey) => {
+        // Check if custom view has this filter visibility setting (including false values)
+        if (filterKey in customViewFilterVisibility) {
+          const value = customViewFilterVisibility[filterKey];
+          // Handle boolean, string, or number values
+          if (typeof value === 'boolean') {
+            effective[filterKey] = value;
+          } else if (typeof value === 'string') {
+            effective[filterKey] = value === 'true';
+          } else if (typeof value === 'number') {
+            effective[filterKey] = value === 1;
+          } else {
+            effective[filterKey] = !!value;
+          }
+        }
+      });
+      
+      console.log('[DocumentsCustomView] Computed effectiveFilterVisibility:', effective);
+    } else {
+      console.log('[DocumentsCustomView] No custom view filter visibility, using global:', globalFilterVisibility);
+    }
+    
+    return effective;
+  }, [globalFilterVisibility, appliedCustomView?.filter_visibility, appliedCustomView?.id, appliedCustomView?.name, pendingFilterVisibility]);
   
   const {
     documents,
@@ -312,7 +360,7 @@ export function DocumentsCustomView() {
   const { panelWidth, isPanelVisible, setIsPanelVisible, handleResizeStart } = usePanelManagement();
 
   // Filter visibility change handlers
-  const handleFilterVisibilityChange = useCallback((key: keyof typeof filterVisibility, visible: boolean) => {
+  const handleFilterVisibilityChange = useCallback((key: keyof FilterVisibility, visible: boolean) => {
     updateFilterVisibility[key](visible);
     
     if (appliedCustomView && selectedCustomViewId && typeof selectedCustomViewId === 'number') {
@@ -321,6 +369,15 @@ export function DocumentsCustomView() {
         ...currentFilterVisibility,
         [key]: visible,
       };
+      
+      // Debug: Log filter visibility change
+      console.log('[DocumentsCustomView] Filter visibility changed:', {
+        key,
+        visible,
+        currentFilterVisibility,
+        updatedFilterVisibility,
+      });
+      
       setPendingFilterVisibility(updatedFilterVisibility);
     }
   }, [updateFilterVisibility, appliedCustomView, selectedCustomViewId, pendingFilterVisibility, setPendingFilterVisibility]);
@@ -391,7 +448,7 @@ export function DocumentsCustomView() {
           selectedCustomViewId={selectedCustomViewId}
           onSelectView={setSelectedCustomViewId}
           appliedCustomView={appliedCustomView}
-          filterVisibility={filterVisibility}
+          filterVisibility={effectiveFilterVisibility}
           onFilterVisibilityChange={handleFilterVisibilityChange}
           onCustomFieldFilterVisibilityChange={handleCustomFieldFilterVisibilityChange}
           customFields={customFields}
@@ -415,7 +472,7 @@ export function DocumentsCustomView() {
         <FilterBar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          filterVisibility={filterVisibility}
+          filterVisibility={effectiveFilterVisibility}
           filters={filters}
           updateFilter={updateFilter}
           documentTypes={documentTypes}

@@ -69,6 +69,15 @@ export function useCustomViewManagement({ tableState }: UseCustomViewManagementO
     appliedViewIdRef.current = (view.id ?? null) as number | string | null;
     setAppliedCustomView(view);
     
+    // Debug: Log what's being applied
+    console.log('[useCustomViewManagement] Applying custom view:', {
+      viewId: view.id,
+      viewName: view.name,
+      filter_visibility: view.filter_visibility,
+      hasFilterVisibility: !!view.filter_visibility,
+      filterVisibilityKeys: view.filter_visibility ? Object.keys(view.filter_visibility) : [],
+    });
+    
     // Store original state for revert functionality
     setOriginalColumnSizing(view.column_sizing || {});
     setOriginalColumnOrder(view.column_order || []);
@@ -113,12 +122,22 @@ export function useCustomViewManagement({ tableState }: UseCustomViewManagementO
       });
       
       if (view) {
+        // Debug: Log what view we're about to apply
+        console.log('[useCustomViewManagement] Found view to apply:', {
+          viewId: view.id,
+          viewName: view.name,
+          filter_visibility: view.filter_visibility,
+          hasFilterVisibility: !!view.filter_visibility,
+          filterVisibilityKeys: view.filter_visibility ? Object.keys(view.filter_visibility) : [],
+          filterVisibilityValues: view.filter_visibility,
+        });
         applyCustomView(view);
         // Persist selection
         if (typeof window !== 'undefined') {
           localStorage.setItem('lastSelectedCustomViewId', String(selectedCustomViewId));
         }
       } else {
+        console.log('[useCustomViewManagement] View not found for ID:', selectedCustomViewId);
         setAppliedCustomView(null);
         setOriginalColumnSizing({});
         setOriginalColumnOrder([]);

@@ -42,13 +42,18 @@ export function FilterDropDown({
   const hasSelection = selectedIds.length > 0;
   const allOptionId = "__all__"; // Special ID for "All" option
   
+  // Helper to check if an ID is selected (handles type mismatches)
+  const isIdSelected = (id: string | number): boolean => {
+    return selectedIds.some(selectedId => String(selectedId) === String(id) || selectedId === id);
+  };
+  
   // Check if all items are selected
-  const allSelected = options.length > 0 && options.every(opt => selectedIds.includes(opt.id));
+  const allSelected = options.length > 0 && options.every(opt => isIdSelected(opt.id));
   
   // Sort options so checked items appear first
   const sortedOptions = [...options].sort((a, b) => {
-    const aChecked = selectedIds.includes(a.id);
-    const bChecked = selectedIds.includes(b.id);
+    const aChecked = isIdSelected(a.id);
+    const bChecked = isIdSelected(b.id);
     if (aChecked === bChecked) return 0;
     return aChecked ? -1 : 1;
   });
@@ -95,19 +100,83 @@ export function FilterDropDown({
     if (!hasSelection) return label;
     
     if (multiSelect) {
+      // For multi-select, show count and try to show labels for selected items
+      const selectedOptions = selectedIds
+        .map(id => {
+          // Try multiple comparison strategies
+          const opt = options.find(opt => 
+            String(opt.id) === String(id) || 
+            opt.id === id ||
+            String(opt.id) === id ||
+            opt.id === String(id)
+          );
+          return opt;
+        })
+        .filter(Boolean) as FilterOption[];
+      
+      if (selectedOptions.length === selectedIds.length && selectedOptions.length > 0) {
+        // All selected items have matching options - show labels
+        // But check if labels are actually IDs
+        const labels = selectedOptions.map(opt => {
+          // If label equals id, something is wrong with the data
+          if (String(opt.label) === String(opt.id)) {
+            console.warn(`[FilterDropDown] Option label equals ID for option:`, opt);
+          }
+          return opt.label;
+        });
+        
+        if (selectedOptions.length === 1) {
+          return `${label} (${labels[0]})`;
+        } else if (selectedOptions.length <= 3) {
+          return `${label} (${labels.join(', ')})`;
+        } else {
+          return `${label} (${selectedOptions.length})`;
+        }
+      }
+      // Some or all selected items don't have matching options - just show count
+      // Don't show IDs - wait for options to load
+      if (options.length > 0) {
+        console.warn(`[FilterDropDown] Could not find matching options for selectedIds:`, {
+          selectedIds,
+          availableIds: options.map(opt => opt.id),
+          label,
+        });
+      }
       return `${label} (${selectedIds.length})`;
     } else {
-      const selectedOption = options.find(opt => opt.id === selectedIds[0]);
+      // Single select - find matching option with flexible comparison
+      const selectedId = selectedIds[0];
+      const selectedOption = options.find(opt => 
+        String(opt.id) === String(selectedId) || 
+        opt.id === selectedId ||
+        String(opt.id) === selectedId ||
+        opt.id === String(selectedId)
+      );
+      
       if (selectedOption) {
+        // Check if label is actually the ID
+        if (String(selectedOption.label) === String(selectedOption.id)) {
+          console.warn(`[FilterDropDown] Option label equals ID:`, selectedOption);
+        }
+        
         // For date ranges, show shortened version
         if (label === "Date Range") {
-          const id = selectedIds[0];
+          const id = String(selectedId);
           if (id === "7") return `${label} (7 days)`;
           if (id === "30") return `${label} (30 days)`;
           if (id === "90") return `${label} (90 days)`;
           if (id === "all") return `${label} (All time)`;
         }
         return `${label} (${selectedOption.label})`;
+      }
+      // Option not found - don't show ID, just return label
+      // This can happen if options haven't loaded yet
+      if (options.length > 0) {
+        console.warn(`[FilterDropDown] Could not find matching option for selectedId:`, {
+          selectedId,
+          availableIds: options.map(opt => opt.id),
+          label,
+        });
       }
       return label;
     }
@@ -148,7 +217,7 @@ export function FilterDropDown({
               </>
             )}
             {sortedOptions.map((option) => {
-              const isChecked = selectedIds.includes(option.id);
+              const isChecked = isIdSelected(option.id);
               return (
                 <FilterMenu.FilterMenuItem
                   key={option.id}
