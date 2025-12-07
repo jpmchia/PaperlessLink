@@ -85,39 +85,37 @@ export function useCustomViewActions({
     try {
       setIsSaving(true);
       
-      // Convert current column sizing to the format expected by CustomView and normalize
-      const updatedColumnSizing = normalizeColumnSizing(tableState.columnSizing);
-      
-      // Get pending order, visibility, filter visibility, and column spanning, or use current
+      // Build the complete view data from current state
+      // Use pending values if available, otherwise use current applied view values
       const rawOrder = pendingColumnOrder ?? appliedCustomView.column_order ?? [];
       const rawVisibility = pendingColumnVisibility ?? appliedCustomView.column_visibility ?? {};
       const rawColumnSpanning = pendingColumnSpanning ?? appliedCustomView.column_spanning ?? {};
+      const rawFilterVisibility = pendingFilterVisibility ?? appliedCustomView.filter_visibility ?? {};
       
       // Normalize all column IDs to consistent format
+      const updatedColumnSizing = normalizeColumnSizing(tableState.columnSizing);
       const updatedOrder = normalizeColumnOrder(rawOrder);
       const updatedVisibility = normalizeColumnVisibility(rawVisibility);
       const updatedColumnSpanning = normalizeColumnSpanning(rawColumnSpanning);
-      const updatedFilterVisibility = pendingFilterVisibility ?? appliedCustomView.filter_visibility ?? {};
       
-      // Debug: Log what we're saving
-      console.log('[useCustomViewActions] Saving custom view:', {
-        viewId: selectedCustomViewId,
-        viewName: appliedCustomView.name,
-        pendingFilterVisibility,
-        appliedCustomViewFilterVisibility: appliedCustomView.filter_visibility,
-        updatedFilterVisibility,
-        updatedColumnSpanning,
-      });
-      
-      // Update the custom view
+      // Save all fields from the current view, updating with pending changes
       await updateCustomView({
         id: selectedCustomViewId,
         data: {
-          column_sizing: updatedColumnSizing,
+          name: appliedCustomView.name,
+          description: appliedCustomView.description,
+          is_global: appliedCustomView.is_global,
           column_order: updatedOrder,
+          column_sizing: updatedColumnSizing,
           column_visibility: updatedVisibility,
-          filter_visibility: updatedFilterVisibility,
+          column_display_types: appliedCustomView.column_display_types,
+          filter_rules: appliedCustomView.filter_rules,
+          filter_visibility: rawFilterVisibility,
           column_spanning: updatedColumnSpanning,
+          sort_field: appliedCustomView.sort_field,
+          sort_reverse: appliedCustomView.sort_reverse,
+          subrow_enabled: appliedCustomView.subrow_enabled,
+          subrow_content: appliedCustomView.subrow_content,
         },
       });
       
@@ -225,34 +223,34 @@ export function useCustomViewActions({
     try {
       setIsSaving(true);
       
-      // Convert current column sizing to the format expected by CustomView
-      const updatedColumnSizing: Record<string, number> = {};
-      Object.entries(tableState.columnSizing).forEach(([key, value]) => {
-        if (typeof value === 'number' && value > 0) {
-          updatedColumnSizing[key] = value;
-        }
-      });
+      // Build complete view data for Save As - use all fields from current view
+      const rawOrder = pendingColumnOrder ?? appliedCustomView.column_order ?? [];
+      const rawVisibility = pendingColumnVisibility ?? appliedCustomView.column_visibility ?? {};
+      const rawColumnSpanning = pendingColumnSpanning ?? appliedCustomView.column_spanning ?? {};
+      const rawFilterVisibility = pendingFilterVisibility ?? appliedCustomView.filter_visibility ?? {};
       
-      // Get pending order, visibility, filter visibility, and column spanning, or use current
-      const updatedOrder = pendingColumnOrder ?? appliedCustomView.column_order ?? [];
-      const updatedVisibility = pendingColumnVisibility ?? appliedCustomView.column_visibility ?? {};
-      const updatedFilterVisibility = pendingFilterVisibility ?? appliedCustomView.filter_visibility ?? {};
-      const updatedColumnSpanning = pendingColumnSpanning ?? appliedCustomView.column_spanning ?? {};
+      // Normalize all column IDs to consistent format
+      const updatedColumnSizing = normalizeColumnSizing(tableState.columnSizing);
+      const updatedOrder = normalizeColumnOrder(rawOrder);
+      const updatedVisibility = normalizeColumnVisibility(rawVisibility);
+      const updatedColumnSpanning = normalizeColumnSpanning(rawColumnSpanning);
       
-      // Create new view with current settings
+      // Create new view with all current settings
       const newView = await createCustomView({
         name: newViewName.trim(),
         description: appliedCustomView.description || '',
-        is_global: appliedCustomView.is_global || false,
+        is_global: false, // Save As always creates user-only views
         column_order: updatedOrder,
-        column_visibility: updatedVisibility,
         column_sizing: updatedColumnSizing,
+        column_visibility: updatedVisibility,
         column_display_types: appliedCustomView.column_display_types || {},
         filter_rules: appliedCustomView.filter_rules,
-        filter_visibility: updatedFilterVisibility,
+        filter_visibility: rawFilterVisibility,
         column_spanning: updatedColumnSpanning,
         sort_field: appliedCustomView.sort_field,
         sort_reverse: appliedCustomView.sort_reverse,
+        subrow_enabled: appliedCustomView.subrow_enabled,
+        subrow_content: appliedCustomView.subrow_content,
       });
       
       // Refetch views to get the latest

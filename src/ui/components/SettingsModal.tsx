@@ -655,9 +655,11 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     if (typeof selectedViewId === 'string' && selectedViewId.startsWith('draft-')) {
       try {
         setIsSavingView(true);
+        // Save all fields from the current view
         const persistedView = await createCustomView({
           name: currentView.name,
           description: currentView.description,
+          is_global: currentView.is_global ?? false,
           column_order: currentView.column_order || [],
           column_sizing: currentView.column_sizing || {},
           column_visibility: currentView.column_visibility || {},
@@ -665,7 +667,10 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           column_spanning: currentView.column_spanning || {},
           filter_rules: currentView.filter_rules || [],
           filter_visibility: currentView.filter_visibility || {},
-          is_global: currentView.is_global,
+          sort_field: currentView.sort_field,
+          sort_reverse: currentView.sort_reverse,
+          subrow_enabled: currentView.subrow_enabled,
+          subrow_content: currentView.subrow_content,
         });
         
         if (persistedView.id) {
@@ -715,6 +720,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           is_global: currentView.is_global,
         });
         
+        // Save all fields from the current view
         await updateCustomView({
           id: selectedViewId,
           data: {
@@ -728,6 +734,10 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             column_spanning: currentView.column_spanning,
             filter_rules: currentView.filter_rules,
             filter_visibility: currentView.filter_visibility,
+            sort_field: currentView.sort_field,
+            sort_reverse: currentView.sort_reverse,
+            subrow_enabled: currentView.subrow_enabled,
+            subrow_content: currentView.subrow_content,
           },
         });
         
