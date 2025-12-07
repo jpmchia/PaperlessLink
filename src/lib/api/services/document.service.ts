@@ -49,7 +49,19 @@ export class DocumentService extends BaseService<Document> {
     const extraParams = restParams.extraParams || {}
 
     if (filterRules) {
-      Object.assign(extraParams, queryParamsFromFilterRules(filterRules))
+      const queryParams = queryParamsFromFilterRules(filterRules)
+      Object.assign(extraParams, queryParams)
+      
+      // Debug logging for custom field queries
+      if (queryParams?.custom_field_query) {
+        console.log('[DocumentService] Sending custom_field_query to paperless-ngx:', queryParams.custom_field_query)
+        try {
+          const parsed = JSON.parse(queryParams.custom_field_query as string)
+          console.log('[DocumentService] Parsed custom_field_query:', JSON.stringify(parsed, null, 2))
+        } catch (e) {
+          console.error('[DocumentService] Failed to parse custom_field_query:', e)
+        }
+      }
     }
 
     return this.list({

@@ -12,6 +12,7 @@ import { SETTINGS_KEYS } from "@/app/data/ui-settings";
 import { getDefaultFilterType } from "@/ui/components/settings/customFieldHelpers";
 import { UiSettings } from "@/app/data/ui-settings";
 import { useCustomFieldValues } from "@/lib/api/hooks/use-custom-field-values";
+import { buildCustomFieldQueries, combineCustomFieldQueries } from './customFieldQueryBuilder';
 
 interface FilterBarProps {
   searchQuery: string;
@@ -272,6 +273,7 @@ export const FilterBar = memo<FilterBarProps>(({
               filterType={filterType}
               currentFilterValue={currentFilterValue}
               selectOptions={field.extra_data?.select_options || []}
+              allFilters={filters}
               onSelectionChange={(ids) => {
                 updateFilter.customField(field.id!, filterType, ids.length > 0 ? ids : null);
               }}
@@ -306,6 +308,7 @@ function CustomFieldSelectFilter({
   currentFilterValue,
   selectOptions = [],
   onSelectionChange,
+  allFilters,
 }: {
   fieldId: number;
   fieldName: string;
@@ -313,8 +316,96 @@ function CustomFieldSelectFilter({
   currentFilterValue: any;
   selectOptions?: Array<{ id: string; label: string }>;
   onSelectionChange: (ids: (string | number)[]) => void;
+  allFilters?: FilterBarProps['filters'];
 }) {
-  const { values, loading } = useCustomFieldValues(fieldId);
+  // Convert filters to filter rules, excluding the current field
+  const filterRules = useMemo(() => {
+    if (!allFilters) return undefined;
+    
+    // Import filter rule conversion logic
+    const rules: any[] = [];
+    
+    // Correspondent filter
+    if (allFilters.correspondent.length > 0) {
+      allFilters.correspondent.forEach(id => {
+        rules.push({ rule_type: 1, value: id.toString() }); // FILTER_CORRESPONDENT = 1
+      });
+    }
+    
+    // Category/Document Type filter
+    if (allFilters.category.length > 0) {
+      allFilters.category.forEach(id => {
+        rules.push({ rule_type: 2, value: id.toString() }); // FILTER_DOCUMENT_TYPE = 2
+      });
+    }
+    
+    // Tags filter
+    if (allFilters.tags.length > 0) {
+      allFilters.tags.forEach(id => {
+        rules.push({ rule_type: 3, value: id.toString() }); // FILTER_HAS_TAGS_ANY = 3
+      });
+    }
+    
+    // Storage Path filter
+    if (allFilters.storagePath.length > 0) {
+      allFilters.storagePath.forEach(id => {
+        rules.push({ rule_type: 4, value: id.toString() }); // FILTER_STORAGE_PATH = 4
+      });
+    }
+    
+    // Owner filter
+    if (allFilters.owner.length > 0) {
+      allFilters.owner.forEach(username => {
+        rules.push({ rule_type: 5, value: username }); // FILTER_OWNER_ANY = 5
+      });
+    }
+    
+    // Date Range filter
+    if (allFilters.dateRange) {
+      if (allFilters.dateRange.start) {
+        rules.push({ rule_type: 6, value: allFilters.dateRange.start.toISOString().split('T')[0] }); // FILTER_CREATED_AFTER = 6
+      }
+      if (allFilters.dateRange.end) {
+        rules.push({ rule_type: 7, value: allFilters.dateRange.end.toISOString().split('T')[0] }); // FILTER_CREATED_BEFORE = 7
+      }
+    }
+    
+    // ASN filter
+    if (allFilters.asn.length > 0) {
+      allFilters.asn.forEach(id => {
+        rules.push({ rule_type: 8, value: id.toString() }); // FILTER_ASN = 8
+      });
+    }
+    
+    // Status filter
+    if (allFilters.status.length > 0 && allFilters.status.includes('active') && !allFilters.status.includes('archived')) {
+      rules.push({ rule_type: 9, value: '1' }); // FILTER_IS_IN_INBOX = 9
+    }
+    
+    // Custom field filters - exclude the current field, use shared utility function
+    const customFieldQueries = buildCustomFieldQueries(allFilters.customFields, fieldId);
+    const combinedQuery = combineCustomFieldQueries(customFieldQueries);
+    
+    if (combinedQuery) {
+      const queryString = JSON.stringify(combinedQuery);
+      rules.push({ rule_type: 42, value: queryString }); // FILTER_CUSTOM_FIELDS_QUERY = 42
+    }
+    
+    // Debug logging
+    if (rules.length > 0) {
+      console.log(`[CustomFieldSelectFilter] Field ${fieldId} (${fieldName}): Building filter rules:`, {
+        fieldId,
+        fieldName,
+        totalRules: rules.length,
+        hasCustomFieldFilters: customFieldQueries.length > 0,
+        rules,
+      });
+    }
+    
+    return rules.length > 0 ? rules : undefined;
+  }, [allFilters, fieldId, fieldName]);
+  
+  const { values, loading } = useCustomFieldValues(fieldId, filterRules);
   
   // Create maps for lookup: ID -> label and label -> ID (for backwards compatibility)
   const selectOptionMap = useMemo(() => {
@@ -345,6 +436,15 @@ function CustomFieldSelectFilter({
     }
     
     const options = values.map((val) => {
+      // Special handling for blank option - use the ID directly
+      if (val.id === '__blank__') {
+        return {
+          id: '__blank__',
+          label: val.label || '(Blank)',
+          count: val.count,
+        };
+      }
+      
       // The API's "label" field actually contains the select option ID (or sometimes the old label value)
       // The API's "id" field is an internal value ID (like "val-4235291381520459507")
       const selectOptionIdOrLabel = String(val.label || val.id);

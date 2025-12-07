@@ -16,6 +16,7 @@ import {
   FILTER_CUSTOM_FIELDS_QUERY,
 } from '@/app/data/filter-rule-type';
 import { queryParamsFromFilterRules } from '@/app/utils/query-params';
+import { buildCustomFieldQueries, combineCustomFieldQueries } from './customFieldQueryBuilder';
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -84,61 +85,13 @@ function filtersToFilterRules(filters: DocumentFilters): FilterRule[] {
     });
   }
 
-  // Custom field filters - use custom_field_query for proper filtering
+  // Custom field filters - use shared utility function
   // Format: JSON array like ["fieldId", "operator", value] or ["AND", [query1, query2]]
   // See: https://docs.paperless-ngx.com/api/#filtering-by-custom-fields
-  const customFieldQueries: any[] = [];
-  Object.entries(filters.customFields).forEach(([fieldIdStr, filterData]) => {
-    const fieldId = parseInt(fieldIdStr, 10);
-    if (isNaN(fieldId)) return;
-
-    const { type, value } = filterData;
-
-    try {
-      if (type === 'populated') {
-        if (value === 'populated') {
-          // Format: [fieldId, "exists", true]
-          customFieldQueries.push([fieldId, "exists", true]);
-        } else if (value === 'not-populated') {
-          // Format: [fieldId, "isnull", true]
-          customFieldQueries.push([fieldId, "isnull", true]);
-        }
-      } else if (type === 'multi-select' || type === 'single-select') {
-        if (Array.isArray(value) && value.length > 0) {
-          // Format: [fieldId, "in", [value1, value2]]
-          customFieldQueries.push([fieldId, "in", value]);
-        }
-      } else if (type === 'date-range') {
-        if (value && typeof value === 'object' && ('start' in value || 'end' in value)) {
-          const dateRange = value as { start?: Date | null; end?: Date | null };
-          if (dateRange.start && dateRange.end) {
-            // Format: [fieldId, "range", ["start-date", "end-date"]]
-            const startStr = dateRange.start.toISOString().split('T')[0];
-            const endStr = dateRange.end.toISOString().split('T')[0];
-            customFieldQueries.push([fieldId, "range", [startStr, endStr]]);
-          } else if (dateRange.start) {
-            // Format: [fieldId, "gte", "start-date"]
-            const startStr = dateRange.start.toISOString().split('T')[0];
-            customFieldQueries.push([fieldId, "gte", startStr]);
-          } else if (dateRange.end) {
-            // Format: [fieldId, "lte", "end-date"]
-            const endStr = dateRange.end.toISOString().split('T')[0];
-            customFieldQueries.push([fieldId, "lte", endStr]);
-          }
-        }
-      }
-    } catch (error) {
-      console.error(`Error building custom field query for field ${fieldId}:`, error);
-    }
-  });
-
-  if (customFieldQueries.length > 0) {
-    // Combine multiple queries with AND operator
-    // Format: ["AND", [query1, query2, ...]]
-    const combinedQuery = customFieldQueries.length === 1 
-      ? customFieldQueries[0]
-      : ["AND", customFieldQueries];
-    
+  const customFieldQueries = buildCustomFieldQueries(filters.customFields);
+  const combinedQuery = combineCustomFieldQueries(customFieldQueries);
+  
+  if (combinedQuery) {
     // Convert to JSON string for the API
     const queryString = JSON.stringify(combinedQuery);
     console.log('Custom field query:', queryString);
@@ -212,6 +165,13 @@ export function useDocumentList(pageSize: number = DEFAULT_PAGE_SIZE, filters?: 
         filterRules: filterRules && filterRules.length > 0 ? filterRules : undefined,
         extraParams: Object.keys(extraParams).length > 0 ? extraParams : undefined,
       });
+      
+      // Debug logging for empty results
+      if ((response.results || []).length === 0 && filterRules && filterRules.length > 0) {
+        console.warn('No documents returned with filters applied. Filter rules:', filterRules);
+        console.warn('Response:', { count: response.count, results: response.results });
+      }
+      
       setDocuments(response.results || []);
       setTotalCount(response.count || 0);
     } catch (error) {
