@@ -612,6 +612,7 @@ export function DocumentsPage() {
           tags={tags}
           onAddDocument={handleAddDocument}
           filterBarRef={filterBarRef}
+          totalCount={totalCount}
         />
 
         {/* Main Content Area with Resizable Panel */}

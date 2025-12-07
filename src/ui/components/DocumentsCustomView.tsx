@@ -484,6 +484,7 @@ export function DocumentsCustomView() {
           pendingFilterVisibility={pendingFilterVisibility}
           onAddDocument={handleAddDocument}
           filterBarRef={filterBarRef}
+          totalCount={totalCount}
         />
 
         {/* Main Content Area with Resizable Panel */}

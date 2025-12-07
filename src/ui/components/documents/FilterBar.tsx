@@ -4,7 +4,7 @@ import { DateRangePicker } from "@/ui/components/DateRangePicker";
 import { FilterDropDown } from "@/ui/components/FilterDropDown";
 import { Button } from "@/ui/components/Button";
 import { IconButton } from "@/ui/components/IconButton";
-import { FeatherSearch, FeatherTag, FeatherUser, FeatherFolder, FeatherUsers, FeatherListFilter, FeatherHash, FeatherChevronRight, FeatherChevronLeft, FeatherDownload, FeatherPlus } from "@subframe/core";
+import { FeatherSearch, FeatherTag, FeatherUser, FeatherFolder, FeatherUsers, FeatherListFilter, FeatherHash, FeatherChevronRight, FeatherChevronLeft, FeatherDownload, FeatherPlus, FeatherX } from "@subframe/core";
 import { useDocumentFilters, FilterVisibility } from './useDocumentFilters';
 import { CustomField } from "@/app/data/custom-field";
 import { CustomView } from "@/app/data/custom-view";
@@ -52,6 +52,7 @@ interface FilterBarProps {
   pendingFilterVisibility?: Record<string, boolean> | null;
   onAddDocument: () => void;
   filterBarRef?: React.RefObject<HTMLDivElement>;
+  totalCount?: number;
 }
 
 export const FilterBar = memo<FilterBarProps>(({
@@ -69,6 +70,7 @@ export const FilterBar = memo<FilterBarProps>(({
   pendingFilterVisibility,
   onAddDocument,
   filterBarRef,
+  totalCount,
 }) => {
   // Memoize filter options to prevent unnecessary re-renders
   const categoryOptions = useMemo(
@@ -91,6 +93,150 @@ export const FilterBar = memo<FilterBarProps>(({
       .map(tag => ({ id: tag.id!, label: tag.name! })),
     [tags]
   );
+
+  // Check if any filters are active
+  const hasActiveFilters = useMemo(() => {
+    if (searchQuery.trim()) return true;
+    if (filters.dateRange?.start || filters.dateRange?.end) return true;
+    if (filters.category.length > 0) return true;
+    if (filters.correspondent.length > 0) return true;
+    if (filters.tags.length > 0) return true;
+    if (filters.storagePath.length > 0) return true;
+    if (filters.owner.length > 0) return true;
+    if (filters.status.length > 0) return true;
+    if (filters.asn.length > 0) return true;
+    if (Object.keys(filters.customFields || {}).length > 0) {
+      // Check if any custom field has a value
+      return Object.values(filters.customFields || {}).some(
+        field => field.value !== null && field.value !== undefined && 
+        (Array.isArray(field.value) ? field.value.length > 0 : true)
+      );
+    }
+    return false;
+  }, [searchQuery, filters]);
+
+  // Clear all filters
+  const handleClearAllFilters = useCallback(() => {
+    onSearchChange('');
+    updateFilter.dateRange(null);
+    updateFilter.category([]);
+    updateFilter.correspondent([]);
+    updateFilter.tags([]);
+    updateFilter.storagePath([]);
+    updateFilter.owner([]);
+    updateFilter.status([]);
+    updateFilter.asn([]);
+    // Clear all custom field filters
+    Object.keys(filters.customFields || {}).forEach(fieldId => {
+      updateFilter.customField(parseInt(fieldId), '', null);
+    });
+  }, [onSearchChange, updateFilter, filters.customFields]);
+
+  // Generate human-readable filter summary
+  const filterSummary = useMemo(() => {
+    const parts: string[] = [];
+    
+    if (searchQuery.trim()) {
+      parts.push(`search: "${searchQuery}"`);
+    }
+    
+    if (filters.dateRange?.start || filters.dateRange?.end) {
+      const start = filters.dateRange.start?.toLocaleDateString() || '';
+      const end = filters.dateRange.end?.toLocaleDateString() || '';
+      if (start && end) {
+        parts.push(`Created Date: ${start} - ${end}`);
+      } else if (start) {
+        parts.push(`Created Date: from ${start}`);
+      } else if (end) {
+        parts.push(`Created Date: until ${end}`);
+      }
+    }
+    
+    if (filters.category.length > 0) {
+      const names = filters.category
+        .map(id => categoryOptions.find(opt => opt.id === id)?.label)
+        .filter(Boolean)
+        .join(', ');
+      if (names) parts.push(`Document type: ${names}`);
+    }
+    
+    if (filters.correspondent.length > 0) {
+      const names = filters.correspondent
+        .map(id => correspondentOptions.find(opt => opt.id === id)?.label)
+        .filter(Boolean)
+        .join(', ');
+      if (names) parts.push(`Correspondent: ${names}`);
+    }
+    
+    if (filters.tags.length > 0) {
+      const names = filters.tags
+        .map(id => tagOptions.find(opt => opt.id === id)?.label)
+        .filter(Boolean)
+        .join(', ');
+      if (names) parts.push(`Tags: ${names}`);
+    }
+    
+    if (filters.storagePath.length > 0) {
+      parts.push(`Storage Path: ${filters.storagePath.length} selected`);
+    }
+    
+    if (filters.owner.length > 0) {
+      parts.push(`Owner: ${filters.owner.join(', ')}`);
+    }
+    
+    if (filters.status.length > 0) {
+      parts.push(`Status: ${filters.status.join(', ')}`);
+    }
+    
+    if (filters.asn.length > 0) {
+      parts.push(`ASN: ${filters.asn.join(', ')}`);
+    }
+    
+    // Custom field filters
+    Object.entries(filters.customFields || {}).forEach(([fieldIdStr, fieldFilter]) => {
+      if (!fieldFilter.value) return;
+      
+      const fieldId = parseInt(fieldIdStr);
+      const field = customFields.find(f => f.id === fieldId);
+      if (!field) return;
+      
+      const filterType = fieldFilter.type;
+      let valueText = '';
+      
+      if (filterType === 'date-range' && fieldFilter.value) {
+        const range = fieldFilter.value as { start?: Date | null; end?: Date | null };
+        const start = range.start?.toLocaleDateString() || '';
+        const end = range.end?.toLocaleDateString() || '';
+        if (start && end) {
+          valueText = `${start} - ${end}`;
+        } else if (start) {
+          valueText = `from ${start}`;
+        } else if (end) {
+          valueText = `until ${end}`;
+        }
+      } else if (filterType === 'populated' || filterType === 'boolean') {
+        valueText = fieldFilter.value === 'populated' ? 'Populated' : 'Not Populated';
+      } else if (filterType === 'multi-select' || filterType === 'single-select') {
+        const values = Array.isArray(fieldFilter.value) ? fieldFilter.value : [fieldFilter.value];
+        const selectOptions = field.extra_data?.select_options || [];
+        const labels = values.map(val => {
+          if (val === '__blank__') return '(Blank)';
+          const option = selectOptions.find(opt => opt && String(opt.id) === String(val));
+          return option?.label || String(val);
+        });
+        valueText = labels.join(', ');
+      }
+      
+      if (valueText) {
+        parts.push(`${field.name}: ${valueText}`);
+      }
+    });
+    
+    const summaryText = parts.length > 0 ? parts.join(' • ') : 'No filters applied';
+    const countText = totalCount !== undefined ? ` •  ${totalCount.toLocaleString()} ${totalCount === 1 ? 'result' : 'results'}` : '';
+    
+    return summaryText + countText;
+  }, [searchQuery, filters, categoryOptions, correspondentOptions, tagOptions, customFields, totalCount]);
 
   return (
     <div ref={filterBarRef} className="flex w-full flex-none flex-wrap items-center gap-2 border-b border-solid border-neutral-border px-6 py-2">
@@ -285,6 +431,36 @@ export const FilterBar = memo<FilterBarProps>(({
           return null;
         }
       })}
+      
+      {/* Vertical Separator after custom field filters */}
+      {appliedCustomView && customFields.length > 0 && (
+        <div className="h-6 w-px bg-neutral-border" />
+      )}
+      
+      {/* Clear all filters button */}
+      {hasActiveFilters && (
+        <Button
+          variant="neutral-tertiary"
+          size="small"
+          icon={<FeatherX />}
+          onClick={handleClearAllFilters}
+        >
+          Clear all filters
+        </Button>
+      )}
+      
+      {/* Vertical Separator after clear button */}
+      {hasActiveFilters && (
+        <div className="h-6 w-px bg-neutral-border" />
+      )}
+      
+      {/* Filter summary text */}
+      {hasActiveFilters && (
+        <span className="text-body text-neutral-500 text-xs">
+          {filterSummary}
+        </span>
+      )}
+      
       {/* <div className="flex grow shrink-0 basis-0 items-center justify-end gap-2">
         <Button
           variant="brand-primary"
