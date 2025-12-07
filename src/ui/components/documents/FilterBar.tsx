@@ -226,6 +226,61 @@ export const FilterBar = memo<FilterBarProps>(({
     return tagOptions.map(opt => ({ ...opt, count: undefined }));
   }, [tagValuesFromAPI, tagOptions]);
 
+  // Get context-aware filter values for storage paths
+  const storagePathFilterRules = useMemo(() => filtersToFilterRules(FILTER_STORAGE_PATH), [filtersToFilterRules]);
+  const { values: storagePathValuesFromAPI } = useBuiltinFilterValues(
+    filterVisibility.storagePath ? 'storage_path' : null,
+    storagePathFilterRules.length > 0 ? storagePathFilterRules : undefined
+  );
+
+  const storagePathOptionsWithCounts = useMemo(() => {
+    if (storagePathValuesFromAPI.length > 0) {
+      return storagePathValuesFromAPI.map(val => ({
+        id: val.id,
+        label: val.label,
+        count: val.count,
+      }));
+    }
+    return []; // No static fallback for storage paths
+  }, [storagePathValuesFromAPI]);
+
+  // Get context-aware filter values for owners
+  const ownerFilterRules = useMemo(() => filtersToFilterRules(FILTER_OWNER_ANY), [filtersToFilterRules]);
+  const { values: ownerValuesFromAPI } = useBuiltinFilterValues(
+    filterVisibility.owner ? 'owner' : null,
+    ownerFilterRules.length > 0 ? ownerFilterRules : undefined
+  );
+
+  const ownerOptionsWithCounts = useMemo(() => {
+    if (ownerValuesFromAPI.length > 0) {
+      return ownerValuesFromAPI.map(val => ({
+        id: val.id,
+        label: val.label,
+        count: val.count,
+      }));
+    }
+    // Fallback to static "Me" option if available
+    return [{ id: "me", label: "Me", count: undefined }];
+  }, [ownerValuesFromAPI]);
+
+  // Get context-aware filter values for ASN
+  const asnFilterRules = useMemo(() => filtersToFilterRules(FILTER_ASN), [filtersToFilterRules]);
+  const { values: asnValuesFromAPI } = useBuiltinFilterValues(
+    filterVisibility.asn ? 'asn' : null,
+    asnFilterRules.length > 0 ? asnFilterRules : undefined
+  );
+
+  const asnOptionsWithCounts = useMemo(() => {
+    if (asnValuesFromAPI.length > 0) {
+      return asnValuesFromAPI.map(val => ({
+        id: val.id,
+        label: String(val.label), // ASN is a number, convert to string for consistency
+        count: val.count,
+      }));
+    }
+    return []; // No static fallback for ASN
+  }, [asnValuesFromAPI]);
+
   // Check if any filters are active
   const hasActiveFilters = useMemo(() => {
     if (searchQuery.trim()) return true;
@@ -432,7 +487,7 @@ export const FilterBar = memo<FilterBarProps>(({
         <FilterDropDown
           label="Storage Path"
           icon={<FeatherFolder />}
-          options={[]}
+          options={storagePathOptionsWithCounts}
           selectedIds={filters.storagePath}
           onSelectionChange={(ids) => updateFilter.storagePath(ids as number[])}
           multiSelect={true}
@@ -444,7 +499,7 @@ export const FilterBar = memo<FilterBarProps>(({
         <FilterDropDown
           label="Owner"
           icon={<FeatherUsers />}
-          options={[{ id: "me", label: "Me" }]}
+          options={ownerOptionsWithCounts}
           selectedIds={filters.owner}
           onSelectionChange={(ids) => updateFilter.owner(ids as string[])}
           multiSelect={true}
@@ -456,7 +511,7 @@ export const FilterBar = memo<FilterBarProps>(({
         <FilterDropDown
           label="ASN"
           icon={<FeatherHash />}
-          options={[]}
+          options={asnOptionsWithCounts}
           selectedIds={filters.asn}
           onSelectionChange={(ids) => updateFilter.asn(ids as number[])}
           multiSelect={true}
