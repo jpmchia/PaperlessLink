@@ -209,6 +209,8 @@ export function CustomFieldsTable({
             <Table.HeaderCell>Show as Filter</Table.HeaderCell>
             <Table.HeaderCell>Filter Type</Table.HeaderCell>
             <Table.HeaderCell>Show in Table</Table.HeaderCell>
+            <Table.HeaderCell>Span both rows</Table.HeaderCell>
+            <Table.HeaderCell>Show on second row</Table.HeaderCell>
             <Table.HeaderCell>Table Display Type</Table.HeaderCell>
             <Table.HeaderCell>Column Width</Table.HeaderCell>
             <Table.HeaderCell>Show in Edit Mode</Table.HeaderCell>

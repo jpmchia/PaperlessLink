@@ -2,6 +2,12 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { CustomView } from '@/app/data/custom-view';
 import { useCustomViews } from '@/lib/api/hooks';
 import { useTableState } from '../useTableState';
+import {
+  normalizeColumnOrder,
+  normalizeColumnSizing,
+  normalizeColumnVisibility,
+  normalizeColumnSpanning,
+} from '@/ui/utils/columnIdUtils';
 
 interface UseCustomViewManagementOptions {
   tableState: ReturnType<typeof useTableState>;
@@ -14,9 +20,11 @@ interface CustomViewState {
   originalColumnOrder: (string | number)[];
   originalColumnVisibility: Record<string, boolean>;
   originalFilterVisibility: Record<string, boolean>;
+  originalColumnSpanning: Record<string, boolean>;
   pendingColumnOrder: (string | number)[] | null;
   pendingColumnVisibility: Record<string, boolean> | null;
   pendingFilterVisibility: Record<string, boolean> | null;
+  pendingColumnSpanning: Record<string, boolean> | null;
   isSaving: boolean;
 }
 
@@ -32,11 +40,13 @@ export function useCustomViewManagement({ tableState }: UseCustomViewManagementO
   const [originalColumnOrder, setOriginalColumnOrder] = useState<(string | number)[]>([]);
   const [originalColumnVisibility, setOriginalColumnVisibility] = useState<Record<string, boolean>>({});
   const [originalFilterVisibility, setOriginalFilterVisibility] = useState<Record<string, boolean>>({});
+  const [originalColumnSpanning, setOriginalColumnSpanning] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
   
   const [pendingColumnOrder, setPendingColumnOrder] = useState<(string | number)[] | null>(null);
   const [pendingColumnVisibility, setPendingColumnVisibility] = useState<Record<string, boolean> | null>(null);
   const [pendingFilterVisibility, setPendingFilterVisibility] = useState<Record<string, boolean> | null>(null);
+  const [pendingColumnSpanning, setPendingColumnSpanning] = useState<Record<string, boolean> | null>(null);
   
   const appliedViewIdRef = useRef<number | string | null>(null);
 
@@ -78,37 +88,39 @@ export function useCustomViewManagement({ tableState }: UseCustomViewManagementO
       filterVisibilityKeys: view.filter_visibility ? Object.keys(view.filter_visibility) : [],
     });
     
-    // Store original state for revert functionality
-    setOriginalColumnSizing(view.column_sizing || {});
-    setOriginalColumnOrder(view.column_order || []);
-    setOriginalColumnVisibility(view.column_visibility || {});
+    // Normalize column IDs to consistent format when loading from API
+    const normalizedSizing = normalizeColumnSizing(view.column_sizing || {});
+    const normalizedOrder = normalizeColumnOrder(view.column_order || []);
+    const normalizedVisibility = normalizeColumnVisibility(view.column_visibility || {});
+    const normalizedSpanning = normalizeColumnSpanning(view.column_spanning || {});
+    
+    // Store original state for revert functionality (normalized)
+    setOriginalColumnSizing(normalizedSizing);
+    setOriginalColumnOrder(normalizedOrder);
+    setOriginalColumnVisibility(normalizedVisibility);
     setOriginalFilterVisibility(view.filter_visibility || {});
+    setOriginalColumnSpanning(normalizedSpanning);
     
     // Clear pending changes
     setPendingColumnOrder(null);
     setPendingColumnVisibility(null);
     setPendingFilterVisibility(null);
+    setPendingColumnSpanning(null);
     
-    // Apply column sizing
-    if (view.column_sizing) {
-      tableState.setColumnSizing(view.column_sizing);
-    } else {
-      tableState.setColumnSizing({});
+    // Apply column sizing (normalized)
+    tableState.setColumnSizing(normalizedSizing);
+    
+    // Apply column order (normalized - all strings now)
+    if (normalizedOrder.length > 0) {
+      tableState.setColumnOrder(normalizedOrder);
     }
     
-    // Apply column order
-    if (view.column_order && view.column_order.length > 0) {
-      tableState.setColumnOrder(view.column_order.map(id => String(id)));
-    }
-    
-    // Apply column visibility (for built-in fields)
-    if (view.column_visibility) {
-      const visibility: Record<string, boolean> = {};
-      Object.entries(view.column_visibility).forEach(([key, value]) => {
-        visibility[key] = value !== false; // Default to true if not explicitly false
-      });
-      tableState.setColumnVisibility(visibility);
-    }
+    // Apply column visibility (normalized)
+    const visibility: Record<string, boolean> = {};
+    Object.entries(normalizedVisibility).forEach(([key, value]) => {
+      visibility[key] = value !== false; // Default to true if not explicitly false
+    });
+    tableState.setColumnVisibility(visibility);
   }, [tableState.setColumnSizing, tableState.setColumnOrder, tableState.setColumnVisibility]);
 
   // Find and apply the selected custom view
@@ -143,6 +155,7 @@ export function useCustomViewManagement({ tableState }: UseCustomViewManagementO
         setOriginalColumnOrder([]);
         setOriginalColumnVisibility({});
         setOriginalFilterVisibility({});
+        setOriginalColumnSpanning({});
       }
     } else {
       setAppliedCustomView(null);
@@ -150,6 +163,7 @@ export function useCustomViewManagement({ tableState }: UseCustomViewManagementO
       setOriginalColumnOrder([]);
       setOriginalColumnVisibility({});
       setOriginalFilterVisibility({});
+      setOriginalColumnSpanning({});
     }
   }, [selectedCustomViewId, customViews, applyCustomView, setOriginalColumnSizing, setOriginalColumnOrder, setOriginalColumnVisibility, setOriginalFilterVisibility]);
   
@@ -228,12 +242,15 @@ export function useCustomViewManagement({ tableState }: UseCustomViewManagementO
     originalColumnOrder,
     originalColumnVisibility,
     originalFilterVisibility,
+    originalColumnSpanning,
     pendingColumnOrder,
     setPendingColumnOrder,
     pendingColumnVisibility,
     setPendingColumnVisibility,
     pendingFilterVisibility,
     setPendingFilterVisibility,
+    pendingColumnSpanning,
+    setPendingColumnSpanning,
     isSaving,
     setIsSaving,
     updateCustomView,
@@ -245,6 +262,7 @@ export function useCustomViewManagement({ tableState }: UseCustomViewManagementO
     setOriginalColumnOrder,
     setOriginalColumnVisibility,
     setOriginalFilterVisibility,
+    setOriginalColumnSpanning,
   };
 }
 

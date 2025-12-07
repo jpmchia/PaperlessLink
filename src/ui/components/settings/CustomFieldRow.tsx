@@ -56,26 +56,69 @@ export function CustomFieldRow({
   
   if (fieldId === undefined && !isBuiltIn) return null;
 
-  // For built-in fields, use the field ID string; for custom fields, use the numeric ID
-  const filterKey = isBuiltIn ? null : `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_PREFIX}${fieldId}`;
-  const filterTypeKey = isBuiltIn ? null : `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_TYPE_PREFIX}${fieldId}`;
-  const tableColumnKey = isBuiltIn ? `${SETTINGS_KEYS.BUILT_IN_FIELD_TABLE_COLUMN_PREFIX}${fieldId}` : `${SETTINGS_KEYS.CUSTOM_FIELD_TABLE_COLUMN_PREFIX}${fieldId}`;
-  const tableDisplayTypeKey = isBuiltIn ? null : `${SETTINGS_KEYS.CUSTOM_FIELD_TABLE_DISPLAY_TYPE_PREFIX}${fieldId}`;
-  const columnWidthKey = isBuiltIn ? `general-settings:documents:built-in-field:column-width:${fieldId}` : `${SETTINGS_KEYS.CUSTOM_FIELD_COLUMN_WIDTH_PREFIX}${fieldId}`;
-  const editModeKey = isBuiltIn ? null : `${SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_PREFIX}${fieldId}`;
-  const editModeEntryTypeKey = isBuiltIn ? null : `${SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX}${fieldId}`;
-  const tabKey = isBuiltIn ? null : `${SETTINGS_KEYS.CUSTOM_FIELD_TAB_PREFIX}${fieldId}`;
+  // Map built-in field IDs to their filter settings keys
+  // Some fields have legacy DOCUMENTS_FILTER_* keys, others use BUILT_IN_FIELD_FILTER_PREFIX
+  const getBuiltInFilterKey = (fieldId: string): string => {
+    const legacyMapping: Record<string, string> = {
+      'created': SETTINGS_KEYS.DOCUMENTS_FILTER_DATE_RANGE,
+      'category': SETTINGS_KEYS.DOCUMENTS_FILTER_CATEGORY,
+      'correspondent': SETTINGS_KEYS.DOCUMENTS_FILTER_CORRESPONDENT,
+      'asn': SETTINGS_KEYS.DOCUMENTS_FILTER_ASN,
+      'owner': SETTINGS_KEYS.DOCUMENTS_FILTER_OWNER,
+      'tags': SETTINGS_KEYS.DOCUMENTS_FILTER_TAGS,
+      'storage_path': SETTINGS_KEYS.DOCUMENTS_FILTER_STORAGE_PATH,
+    };
+    // Use legacy key if available, otherwise use the standard built-in field filter prefix
+    return legacyMapping[fieldId] || `${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}${fieldId}`;
+  };
+  
+  // For built-in fields, always return a filter key; for custom fields, use the numeric ID
+  const filterKey = isBuiltIn 
+    ? (fieldId && typeof fieldId === 'string' ? getBuiltInFilterKey(fieldId) : null)
+    : `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_PREFIX}${fieldId}`;
+  const filterTypeKey = isBuiltIn 
+    ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_TYPE_PREFIX}${fieldId}` : null)
+    : `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_TYPE_PREFIX}${fieldId}`;
+  const tableColumnKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_TABLE_COLUMN_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_TABLE_COLUMN_PREFIX}${fieldId}`;
+  const spanBothRowsKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_SPAN_BOTH_ROWS_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_SPAN_BOTH_ROWS_PREFIX}${fieldId}`;
+  const showOnSecondRowKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_SHOW_ON_SECOND_ROW_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_SHOW_ON_SECOND_ROW_PREFIX}${fieldId}`;
+  const tableDisplayTypeKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_TABLE_DISPLAY_TYPE_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_TABLE_DISPLAY_TYPE_PREFIX}${fieldId}`;
+  const columnWidthKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `general-settings:documents:built-in-field:column-width:${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_COLUMN_WIDTH_PREFIX}${fieldId}`;
+  const editModeKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_EDIT_MODE_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_PREFIX}${fieldId}`;
+  const editModeEntryTypeKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX}${fieldId}`;
+  const tabKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_TAB_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_TAB_PREFIX}${fieldId}`;
   
   const dataTypeLabel = DATA_TYPE_LABELS.find(
     (dt) => dt.id === field.data_type
   )?.name || field.data_type;
   
-  // Built-in fields can be toggled but default to enabled; can't be filtered or edited
-  const isFilterEnabled = isBuiltIn ? false : getSetting(filterKey!, false);
+  // Built-in fields can be toggled; get filter enabled state
+  const isFilterEnabled = filterKey ? getSetting(filterKey, false) : false;
+  
+  // Get default filter type for built-in fields based on their data type
+  const getBuiltInDefaultFilterType = (fieldId: string): string => {
+    const mapping: Record<string, string> = {
+      'created': 'date-range',
+      'category': 'multi-select',
+      'correspondent': 'multi-select',
+      'asn': 'numerical',
+      'owner': 'multi-select',
+    };
+    return mapping[fieldId] || 'populated';
+  };
   
   // Use local state for toggles to ensure immediate UI feedback
   const [localTableColumnEnabled, setLocalTableColumnEnabled] = useState(() => 
     isBuiltIn ? getSetting(tableColumnKey, true) : getSetting(tableColumnKey!, false)
+  );
+  const [localFilterEnabled, setLocalFilterEnabled] = useState(() => 
+    filterKey ? getSetting(filterKey, false) : false
+  );
+  const [localSpanBothRows, setLocalSpanBothRows] = useState(() => 
+    spanBothRowsKey ? getSetting(spanBothRowsKey, false) : false
+  );
+  const [localShowOnSecondRow, setLocalShowOnSecondRow] = useState(() => 
+    showOnSecondRowKey ? getSetting(showOnSecondRowKey, false) : false
   );
   const [localEditModeEnabled, setLocalEditModeEnabled] = useState(() => 
     isBuiltIn ? false : getSetting(editModeKey!, false)
@@ -84,17 +127,38 @@ export function CustomFieldRow({
   // Sync local state with settings when they change externally
   // Use the actual setting value as dependency to avoid unnecessary re-runs
   const currentTableColumnValue = isBuiltIn ? getSetting(tableColumnKey, true) : getSetting(tableColumnKey!, false);
-  const currentEditModeValue = isBuiltIn ? false : getSetting(editModeKey!, false);
+  const currentFilterValue = filterKey ? getSetting(filterKey, false) : false;
+  const currentSpanBothRowsValue = spanBothRowsKey ? getSetting(spanBothRowsKey, false) : false;
+  const currentShowOnSecondRowValue = showOnSecondRowKey ? getSetting(showOnSecondRowKey, false) : false;
+  const currentEditModeValue = editModeKey ? getSetting(editModeKey, false) : false;
   
   useEffect(() => {
     setLocalTableColumnEnabled(currentTableColumnValue);
   }, [currentTableColumnValue]);
   
   useEffect(() => {
-    if (!isBuiltIn) {
+    if (filterKey) {
+      setLocalFilterEnabled(currentFilterValue);
+    }
+  }, [filterKey, currentFilterValue]);
+  
+  useEffect(() => {
+    if (spanBothRowsKey) {
+      setLocalSpanBothRows(currentSpanBothRowsValue);
+    }
+  }, [spanBothRowsKey, currentSpanBothRowsValue]);
+  
+  useEffect(() => {
+    if (showOnSecondRowKey) {
+      setLocalShowOnSecondRow(currentShowOnSecondRowValue);
+    }
+  }, [showOnSecondRowKey, currentShowOnSecondRowValue]);
+  
+  useEffect(() => {
+    if (editModeKey) {
       setLocalEditModeEnabled(currentEditModeValue);
     }
-  }, [isBuiltIn, currentEditModeValue]);
+  }, [editModeKey, currentEditModeValue]);
   
   const isTableColumnEnabled = localTableColumnEnabled;
   const isEditModeEnabled = localEditModeEnabled;
@@ -102,10 +166,12 @@ export function CustomFieldRow({
   const filterTypeOptions = getFilterTypeOptions(field.data_type);
   const tableDisplayTypeOptions = getTableDisplayTypeOptions();
   const editModeEntryTypeOptions = getEditModeEntryTypeOptions();
-  const currentFilterType = isBuiltIn ? null : getSetting(filterTypeKey!, getDefaultFilterType(field.data_type));
-  const currentTableDisplayType = isBuiltIn ? getDefaultTableDisplayType(field.data_type) : getSetting(tableDisplayTypeKey!, getDefaultTableDisplayType(field.data_type));
-  const currentEditModeEntryType = isBuiltIn ? null : getSetting(editModeEntryTypeKey!, getDefaultEditModeEntryType(field.data_type));
-  const currentTab = isBuiltIn ? 'Default' : getSetting(tabKey!, 'Default');
+  const currentFilterType = filterTypeKey 
+    ? getSetting(filterTypeKey, isBuiltIn && fieldId && typeof fieldId === 'string' ? getBuiltInDefaultFilterType(fieldId) : getDefaultFilterType(field.data_type))
+    : null;
+  const currentTableDisplayType = tableDisplayTypeKey ? getSetting(tableDisplayTypeKey, getDefaultTableDisplayType(field.data_type)) : getDefaultTableDisplayType(field.data_type);
+  const currentEditModeEntryType = editModeEntryTypeKey ? getSetting(editModeEntryTypeKey, getDefaultEditModeEntryType(field.data_type)) : null;
+  const currentTab = tabKey ? getSetting(tabKey, 'Default') : 'Default';
 
   // Get column width - handle both string and number types from settings
   const columnWidthRaw = getSetting(columnWidthKey, '');
@@ -159,27 +225,23 @@ export function CustomFieldRow({
         </span>
       </Table.Cell>
       <Table.Cell>
-        <div className="flex items-center justify-center">
-          {isBuiltIn ? (
+        <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          {filterKey ? (
             <Switch
-              checked={false}
-              disabled={true}
+              checked={localFilterEnabled}
+              onCheckedChange={(checked) => {
+                setLocalFilterEnabled(checked);
+                updateSetting(filterKey, checked);
+              }}
             />
           ) : (
-            <Switch
-              checked={isFilterEnabled}
-              onCheckedChange={(checked) =>
-                updateSetting(filterKey!, checked)
-              }
-            />
+            <span className="text-body font-body text-subtext-color">—</span>
           )}
         </div>
       </Table.Cell>
       <Table.Cell>
         <div className="flex items-center justify-center">
-          {isBuiltIn ? (
-            <span className="text-body font-body text-subtext-color">—</span>
-          ) : isFilterEnabled ? (
+          {filterKey && localFilterEnabled ? (
             <SubframeCore.DropdownMenu.Root>
               <SubframeCore.DropdownMenu.Trigger asChild={true}>
                 <Button
@@ -206,7 +268,9 @@ export function CustomFieldRow({
                         icon={null}
                         onClick={() => {
                           setTimeout(() => {
-                            updateSetting(filterTypeKey!, option.value);
+                            if (filterTypeKey) {
+                              updateSetting(filterTypeKey, option.value);
+                            }
                           }, 200);
                         }}
                       >
@@ -244,8 +308,46 @@ export function CustomFieldRow({
         </div>
       </Table.Cell>
       <Table.Cell>
+        <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          {spanBothRowsKey && isTableColumnEnabled ? (
+            <Switch
+              checked={localSpanBothRows}
+              onCheckedChange={(checked) => {
+                // Update local state immediately for instant UI feedback
+                setLocalSpanBothRows(checked);
+                // Then update the view setting
+                if (spanBothRowsKey) {
+                  updateSetting(spanBothRowsKey, checked);
+                }
+              }}
+            />
+          ) : (
+            <span className="text-body font-body text-subtext-color">—</span>
+          )}
+        </div>
+      </Table.Cell>
+      <Table.Cell>
+        <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          {showOnSecondRowKey && isTableColumnEnabled ? (
+            <Switch
+              checked={localShowOnSecondRow}
+              onCheckedChange={(checked) => {
+                // Update local state immediately for instant UI feedback
+                setLocalShowOnSecondRow(checked);
+                // Then update the view setting
+                if (showOnSecondRowKey) {
+                  updateSetting(showOnSecondRowKey, checked);
+                }
+              }}
+            />
+          ) : (
+            <span className="text-body font-body text-subtext-color">—</span>
+          )}
+        </div>
+      </Table.Cell>
+      <Table.Cell>
         <div className="flex items-center justify-center">
-          {isBuiltIn || isTableColumnEnabled ? (
+          {isTableColumnEnabled && tableDisplayTypeKey ? (
             <SubframeCore.DropdownMenu.Root>
               <SubframeCore.DropdownMenu.Trigger asChild={true}>
                 <Button
@@ -253,38 +355,37 @@ export function CustomFieldRow({
                   size="small"
                   iconRight={<FeatherChevronDown />}
                   className="w-40 justify-between"
-                  disabled={isBuiltIn}
                 >
                   {tableDisplayTypeOptions.find(opt => opt.value === currentTableDisplayType)?.label || "Select type"}
                 </Button>
               </SubframeCore.DropdownMenu.Trigger>
-              {!isBuiltIn && (
-                <SubframeCore.DropdownMenu.Portal>
-                  <SubframeCore.DropdownMenu.Content
-                    side="bottom"
-                    align="start"
-                    sideOffset={4}
-                    asChild={true}
-                    style={{ zIndex: 10001 }}
-                  >
-                    <DropdownMenu className="z-[10001]">
-                      {tableDisplayTypeOptions.map((option) => (
-                        <DropdownMenu.DropdownItem
-                          key={option.value}
-                          icon={null}
-                          onClick={() => {
-                            setTimeout(() => {
-                              updateSetting(tableDisplayTypeKey!, option.value);
-                            }, 200);
-                          }}
-                        >
-                          {option.label}
-                        </DropdownMenu.DropdownItem>
-                      ))}
-                    </DropdownMenu>
-                  </SubframeCore.DropdownMenu.Content>
-                </SubframeCore.DropdownMenu.Portal>
-              )}
+              <SubframeCore.DropdownMenu.Portal>
+                <SubframeCore.DropdownMenu.Content
+                  side="bottom"
+                  align="start"
+                  sideOffset={4}
+                  asChild={true}
+                  style={{ zIndex: 10001 }}
+                >
+                  <DropdownMenu className="z-[10001]">
+                    {tableDisplayTypeOptions.map((option) => (
+                      <DropdownMenu.DropdownItem
+                        key={option.value}
+                        icon={null}
+                        onClick={() => {
+                          setTimeout(() => {
+                            if (tableDisplayTypeKey) {
+                              updateSetting(tableDisplayTypeKey, option.value);
+                            }
+                          }, 200);
+                        }}
+                      >
+                        {option.label}
+                      </DropdownMenu.DropdownItem>
+                    ))}
+                  </DropdownMenu>
+                </SubframeCore.DropdownMenu.Content>
+              </SubframeCore.DropdownMenu.Portal>
             </SubframeCore.DropdownMenu.Root>
           ) : (
             <Button
@@ -350,26 +451,24 @@ export function CustomFieldRow({
       </Table.Cell>
       <Table.Cell>
         <div className="flex items-center justify-center">
-          {isBuiltIn ? (
-            <span className="text-body font-body text-subtext-color">—</span>
-          ) : (
+          {editModeKey ? (
             <Switch
               checked={isEditModeEnabled}
               onCheckedChange={(checked) => {
                 // Update local state immediately for instant UI feedback
                 setLocalEditModeEnabled(checked);
                 // Then update the view setting
-                updateSetting(editModeKey!, checked);
+                updateSetting(editModeKey, checked);
               }}
             />
+          ) : (
+            <span className="text-body font-body text-subtext-color">—</span>
           )}
         </div>
       </Table.Cell>
       <Table.Cell>
         <div className="flex items-center justify-center">
-          {isBuiltIn ? (
-            <span className="text-body font-body text-subtext-color">—</span>
-          ) : isEditModeEnabled ? (
+          {editModeEntryTypeKey && isEditModeEnabled ? (
             <SubframeCore.DropdownMenu.Root>
               <SubframeCore.DropdownMenu.Trigger asChild={true}>
                 <Button
@@ -396,7 +495,9 @@ export function CustomFieldRow({
                         icon={null}
                         onClick={() => {
                           setTimeout(() => {
-                            updateSetting(editModeEntryTypeKey!, option.value);
+                            if (editModeEntryTypeKey) {
+                              updateSetting(editModeEntryTypeKey, option.value);
+                            }
                           }, 200);
                         }}
                       >
@@ -422,7 +523,7 @@ export function CustomFieldRow({
       </Table.Cell>
       <Table.Cell>
         <div className="flex items-center justify-center gap-2">
-          {isEditModeEnabled ? (
+          {tabKey && isEditModeEnabled ? (
             <div className="flex items-center gap-2">
               <SubframeCore.DropdownMenu.Root>
                 <SubframeCore.DropdownMenu.Trigger asChild={true}>
@@ -450,49 +551,55 @@ export function CustomFieldRow({
                           icon={null}
                           onClick={() => {
                             setTimeout(() => {
-                              updateSetting(tabKey!, tab);
+                              if (tabKey) {
+                                updateSetting(tabKey, tab);
+                              }
                             }, 200);
                           }}
                         >
                           {tab}
                         </DropdownMenu.DropdownItem>
                       ))}
-                      <DropdownMenu.DropdownDivider />
-                      <div className="px-3 py-2">
-                        <TextField>
-                          <TextField.Input
-                            placeholder="Enter new tab name"
-                            value={newTabInput[field.id! as number] || ''}
-                            onChange={(e) => {
-                              const fieldId = field.id! as number;
-                              setNewTabInput((prev) => ({
-                                ...prev,
-                                [fieldId]: e.target.value,
-                              }));
-                            }}
-                            onKeyDown={(e) => {
-                              const fieldId = field.id as number;
-                              if (fieldId !== undefined && e.key === 'Enter' && newTabInput[fieldId]) {
-                                handleAddTab(fieldId, newTabInput[fieldId]);
-                                e.preventDefault();
-                              }
-                            }}
-                          />
-                        </TextField>
-                        <Button
-                          variant="brand-primary"
-                          size="small"
-                          className="mt-2 w-full"
-                          onClick={() => {
-                            const fieldId = field.id as number;
-                            if (fieldId !== undefined && newTabInput[fieldId]) {
-                              handleAddTab(fieldId, newTabInput[fieldId]);
-                            }
-                          }}
-                        >
-                          Add Tab
-                        </Button>
-                      </div>
+                      {!isBuiltIn && (
+                        <>
+                          <DropdownMenu.DropdownDivider />
+                          <div className="px-3 py-2">
+                            <TextField>
+                              <TextField.Input
+                                placeholder="Enter new tab name"
+                                value={newTabInput[field.id! as number] || ''}
+                                onChange={(e) => {
+                                  const fieldId = field.id! as number;
+                                  setNewTabInput((prev) => ({
+                                    ...prev,
+                                    [fieldId]: e.target.value,
+                                  }));
+                                }}
+                                onKeyDown={(e) => {
+                                  const fieldId = field.id as number;
+                                  if (fieldId !== undefined && e.key === 'Enter' && newTabInput[fieldId]) {
+                                    handleAddTab(fieldId, newTabInput[fieldId]);
+                                    e.preventDefault();
+                                  }
+                                }}
+                              />
+                            </TextField>
+                            <Button
+                              variant="brand-primary"
+                              size="small"
+                              className="mt-2 w-full"
+                              onClick={() => {
+                                const fieldId = field.id as number;
+                                if (fieldId !== undefined && newTabInput[fieldId]) {
+                                  handleAddTab(fieldId, newTabInput[fieldId]);
+                                }
+                              }}
+                            >
+                              Add Tab
+                            </Button>
+                          </div>
+                        </>
+                      )}
                     </DropdownMenu>
                   </SubframeCore.DropdownMenu.Content>
                 </SubframeCore.DropdownMenu.Portal>

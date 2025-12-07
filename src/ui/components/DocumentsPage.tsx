@@ -25,7 +25,7 @@ import { useTableState } from "./documents/useTableState";
 import { useTableColumns } from "./documents/useTableColumns";
 import { FilterBar } from "./documents/FilterBar";
 import { DocumentPreviewPanel } from "./documents/DocumentPreviewPanel";
-import { createLookupMaps } from "./documents/documentUtils";
+import { createLookupMaps, getCustomFieldValue } from "./documents/documentUtils";
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -317,10 +317,13 @@ export function DocumentsPage() {
       enableResizing: false,
       enableHiding: false,
       size: 50,
+      meta: {
+        renderInSubRow: true, // Actions column only renders in subrow, not main row
+      },
       cell: ({ row }: { row: { original: Document } }) => {
         const doc = row.original;
         return (
-          <div className="flex grow shrink-0 basis-0 items-center justify-end">
+          <div className="flex items-center justify-center">
             <SubframeCore.DropdownMenu.Root>
               <SubframeCore.DropdownMenu.Trigger asChild={true}>
                 <IconButton
@@ -639,14 +642,17 @@ export function DocumentsPage() {
                 enableColumnReordering={false}
                 enableColumnVisibility={false}
                 renderSubRow={(doc) => {
-                  if (!doc.tags || doc.tags.length === 0) return null;
+                  // Find Summary field
+                  const summaryField = customFields.find(f => f.name === 'Summary');
+                  if (!summaryField || !summaryField.id) return null;
+                  
+                  // Get summary value
+                  const summaryValue = getCustomFieldValue(doc, summaryField.id);
+                  if (!summaryValue || summaryValue === '') return null;
+                  
                   return (
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {doc.tags.map((tagId) => (
-                        <Badge key={tagId} variant="neutral">
-                          {getTagName(tagId)}
-                        </Badge>
-                      ))}
+                    <div className="text-body font-body text-neutral-500 break-words whitespace-normal">
+                      {String(summaryValue)}
                     </div>
                   );
                 }}

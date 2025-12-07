@@ -80,10 +80,13 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     const newDraftsKey = `${localDraftViews.size}:${JSON.stringify(draftsArray.map(v => ({ 
       id: v.id, 
       name: v.name,
+      description: v.description,
+      is_global: v.is_global,
       column_order: v.column_order,
       column_visibility: v.column_visibility,
       column_display_types: v.column_display_types,
       column_sizing: v.column_sizing,
+      column_spanning: v.column_spanning,
     })))}`;
     if (newDraftsKey !== prevLocalDraftViewsKeyRef.current) {
       prevLocalDraftViewsKeyRef.current = newDraftsKey;
@@ -236,6 +239,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           column_sizing: currentView.column_sizing ? { ...currentView.column_sizing } : {},
           column_visibility: currentView.column_visibility ? { ...currentView.column_visibility } : {},
           column_display_types: currentView.column_display_types ? { ...currentView.column_display_types } : {},
+          column_spanning: currentView.column_spanning ? { ...currentView.column_spanning } : {},
         });
       }
     }
@@ -392,14 +396,17 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     updatedMap.set(tempId, draftView);
     const draftsArray = Array.from(updatedMap.values());
     localDraftViewsArrayRef.current = draftsArray;
-    const newDraftsKey = `${updatedMap.size}:${JSON.stringify(draftsArray.map(v => ({ 
-      id: v.id, 
-      name: v.name,
-      column_order: v.column_order,
-      column_visibility: v.column_visibility,
-      column_display_types: v.column_display_types,
-      column_sizing: v.column_sizing,
-    })))}`;
+        const newDraftsKey = `${updatedMap.size}:${JSON.stringify(draftsArray.map(v => ({ 
+          id: v.id, 
+          name: v.name,
+          description: v.description,
+          is_global: v.is_global,
+          column_order: v.column_order,
+          column_visibility: v.column_visibility,
+          column_display_types: v.column_display_types,
+          column_sizing: v.column_sizing,
+          column_spanning: v.column_spanning,
+        })))}`;
     prevLocalDraftViewsKeyRef.current = newDraftsKey;
     setLocalDraftViewsKey(newDraftsKey);
     
@@ -436,10 +443,13 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         const newDraftsKey = `${updatedMap.size}:${JSON.stringify(draftsArray.map(v => ({ 
           id: v.id, 
           name: v.name,
+          description: v.description,
+          is_global: v.is_global,
           column_order: v.column_order,
           column_visibility: v.column_visibility,
           column_display_types: v.column_display_types,
           column_sizing: v.column_sizing,
+          column_spanning: v.column_spanning,
         })))}`;
         prevLocalDraftViewsKeyRef.current = newDraftsKey;
         setLocalDraftViewsKey(newDraftsKey);
@@ -497,6 +507,9 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           column_display_types: viewData.column_display_types !== undefined
             ? { ...existing.column_display_types, ...viewData.column_display_types }
             : existing.column_display_types,
+          column_spanning: viewData.column_spanning !== undefined
+            ? { ...existing.column_spanning, ...viewData.column_spanning }
+            : existing.column_spanning,
         };
         
         // Update state
@@ -520,6 +533,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           column_visibility: v.column_visibility,
           column_display_types: v.column_display_types,
           column_sizing: v.column_sizing,
+          column_spanning: v.column_spanning,
         })))}`;
         prevLocalDraftViewsKeyRef.current = newDraftsKey;
         setLocalDraftViewsKey(newDraftsKey);
@@ -543,6 +557,9 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           column_display_types: viewData.column_display_types !== undefined
             ? { ...existingDraft.column_display_types, ...viewData.column_display_types }
             : existingDraft.column_display_types,
+          column_spanning: viewData.column_spanning !== undefined
+            ? { ...existingDraft.column_spanning, ...viewData.column_spanning }
+            : existingDraft.column_spanning,
         };
         
         // Update state
@@ -564,6 +581,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           column_visibility: v.column_visibility,
           column_display_types: v.column_display_types,
           column_sizing: v.column_sizing,
+          column_spanning: v.column_spanning,
         })))}`;
         prevLocalDraftViewsKeyRef.current = newDraftsKey;
         setLocalDraftViewsKey(newDraftsKey);
@@ -586,6 +604,9 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
               column_display_types: viewData.column_display_types !== undefined
                 ? { ...savedView.column_display_types, ...viewData.column_display_types }
                 : savedView.column_display_types,
+              column_spanning: viewData.column_spanning !== undefined
+                ? { ...savedView.column_spanning, ...viewData.column_spanning }
+                : savedView.column_spanning,
             };
             updated.set(id, merged);
             
@@ -595,10 +616,13 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             const newDraftsKey = `${updated.size}:${JSON.stringify(draftsArray.map(v => ({ 
               id: v.id, 
               name: v.name,
+              description: v.description,
+              is_global: v.is_global,
               column_order: v.column_order,
               column_visibility: v.column_visibility,
               column_display_types: v.column_display_types,
               column_sizing: v.column_sizing,
+              column_spanning: v.column_spanning,
             })))}`;
             prevLocalDraftViewsKeyRef.current = newDraftsKey;
             setLocalDraftViewsKey(newDraftsKey);
@@ -638,6 +662,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           column_sizing: currentView.column_sizing || {},
           column_visibility: currentView.column_visibility || {},
           column_display_types: currentView.column_display_types || {},
+          column_spanning: currentView.column_spanning || {},
           filter_rules: currentView.filter_rules || [],
           filter_visibility: currentView.filter_visibility || {},
           is_global: currentView.is_global,
@@ -659,6 +684,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             column_sizing: persistedView.column_sizing ? { ...persistedView.column_sizing } : {},
             column_visibility: persistedView.column_visibility ? { ...persistedView.column_visibility } : {},
             column_display_types: persistedView.column_display_types ? { ...persistedView.column_display_types } : {},
+            column_spanning: persistedView.column_spanning ? { ...persistedView.column_spanning } : {},
           });
           await refetchCustomViews();
         }
@@ -680,13 +706,28 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
       // Update existing saved view
       try {
         setIsSavingView(true);
+        
+        // Debug: Log what we're saving
+        console.log('[handleSaveViewChanges] Saving view:', {
+          viewId: selectedViewId,
+          name: currentView.name,
+          description: currentView.description,
+          is_global: currentView.is_global,
+        });
+        
         await updateCustomView({
           id: selectedViewId,
           data: {
+            name: currentView.name || '',
+            description: currentView.description || '',
+            is_global: currentView.is_global ?? false,
             column_order: currentView.column_order,
             column_sizing: currentView.column_sizing,
             column_visibility: currentView.column_visibility,
             column_display_types: currentView.column_display_types,
+            column_spanning: currentView.column_spanning,
+            filter_rules: currentView.filter_rules,
+            filter_visibility: currentView.filter_visibility,
           },
         });
         
@@ -697,6 +738,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           column_sizing: currentView.column_sizing ? { ...currentView.column_sizing } : {},
           column_visibility: currentView.column_visibility ? { ...currentView.column_visibility } : {},
           column_display_types: currentView.column_display_types ? { ...currentView.column_display_types } : {},
+          column_spanning: currentView.column_spanning ? { ...currentView.column_spanning } : {},
         });
         
         // Remove local draft if it exists (changes are now saved)
@@ -794,10 +836,26 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
       });
     };
     
+    // Check basic fields (name, description, is_global)
+    // Handle null/undefined comparisons
+    const currentName = currentView.name || '';
+    const originalName = originalViewState.name || '';
+    if (currentName !== originalName) return true;
+    
+    const currentDescription = currentView.description || '';
+    const originalDescription = originalViewState.description || '';
+    if (currentDescription !== originalDescription) return true;
+    
+    const currentIsGlobal = currentView.is_global ?? false;
+    const originalIsGlobal = originalViewState.is_global ?? false;
+    if (currentIsGlobal !== originalIsGlobal) return true;
+    
+    // Check column configuration
     if (compareArrays(currentView.column_order, originalViewState.column_order)) return true;
     if (compareObjects(currentView.column_sizing, originalViewState.column_sizing)) return true;
     if (compareObjects(currentView.column_visibility, originalViewState.column_visibility)) return true;
     if (compareObjects(currentView.column_display_types, originalViewState.column_display_types)) return true;
+    if (compareObjects(currentView.column_spanning, originalViewState.column_spanning)) return true;
     
     return false;
   }, [selectedViewId, originalViewState, allViews]);
@@ -810,18 +868,16 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         updated.delete(id);
         return updated;
       });
-      if (selectedViewId === id) {
-        setSelectedViewId(null);
-      }
+      // Always return to list view after deletion
+      setSelectedViewId(null);
       return;
     }
     
     // Handle saved view deletion via API
     try {
       await deleteCustomView(id as number);
-      if (selectedViewId === id) {
-        setSelectedViewId(null);
-      }
+      // Always return to list view after deletion
+      setSelectedViewId(null);
       // TODO: Show success toast
     } catch (error) {
       console.error("Failed to delete custom view:", error);

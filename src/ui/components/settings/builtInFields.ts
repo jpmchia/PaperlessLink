@@ -62,5 +62,11 @@ export const BUILT_IN_FIELDS: BuiltInField[] = [
     data_type: CustomFieldDataType.String,
     isBuiltIn: true,
   },
+  {
+    id: "tags",
+    name: "Tags",
+    data_type: CustomFieldDataType.String,
+    isBuiltIn: true,
+  },
 ];
 

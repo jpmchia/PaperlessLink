@@ -16,6 +16,9 @@ interface UseUnsavedChangesOptions {
   originalColumnVisibility: Record<string, boolean>;
   filterVisibilityFromSettings: Record<string, boolean>;
   originalFilterVisibility: Record<string, boolean>;
+  pendingColumnSpanning: Record<string, boolean> | null;
+  columnSpanningFromSettings: Record<string, boolean>;
+  originalColumnSpanning: Record<string, boolean>;
 }
 
 /**
@@ -34,6 +37,9 @@ export function useUnsavedChanges({
   originalColumnVisibility,
   filterVisibilityFromSettings,
   originalFilterVisibility,
+  pendingColumnSpanning,
+  columnSpanningFromSettings,
+  originalColumnSpanning,
 }: UseUnsavedChangesOptions) {
   const hasUnsavedChanges = useMemo(() => {
     if (!appliedCustomView || !selectedCustomViewId || typeof selectedCustomViewId !== 'number') {
@@ -83,6 +89,18 @@ export function useUnsavedChanges({
       }
     }
     
+    // Check column spanning changes
+    const currentColumnSpanning = pendingColumnSpanning ?? columnSpanningFromSettings;
+    const originalColumnSpan = originalColumnSpanning;
+    const allColumnSpanningKeys = Array.from(new Set([...Object.keys(currentColumnSpanning), ...Object.keys(originalColumnSpan)]));
+    for (const key of allColumnSpanningKeys) {
+      const current = currentColumnSpanning[key] ?? false;
+      const original = originalColumnSpan[key] ?? false;
+      if (current !== original) {
+        return true;
+      }
+    }
+    
     return false;
   }, [
     appliedCustomView,
@@ -97,6 +115,9 @@ export function useUnsavedChanges({
     originalColumnVisibility,
     filterVisibilityFromSettings,
     originalFilterVisibility,
+    pendingColumnSpanning,
+    columnSpanningFromSettings,
+    originalColumnSpanning,
   ]);
 
   return { hasUnsavedChanges };

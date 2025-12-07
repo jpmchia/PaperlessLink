@@ -16,6 +16,11 @@ interface ColumnOptions {
     displayType: 'text' | 'date' | 'url' | 'checkbox' | 'list' | 'identifier';
     columnWidth?: number;
   }>;
+  visibleBuiltInFieldColumns?: Array<{
+    fieldId: string;
+    displayType: 'text' | 'date' | 'url' | 'checkbox' | 'list' | 'identifier';
+    columnWidth?: number;
+  }>;
   enabledBuiltInFields: Set<string>;
   builtInFieldWidths: Map<string, number>;
   getDocumentTypeName: (typeId: number | undefined) => string;
@@ -25,6 +30,7 @@ interface ColumnOptions {
   selectedDocuments?: Set<number>;
   onTogglePin?: (docId: number) => void;
   onToggleSelect?: (docId: number) => void;
+  columnSpanning?: Record<string, boolean>; // Map of column ID to whether it spans two rows
 }
 
 /**
@@ -33,6 +39,7 @@ interface ColumnOptions {
 export function useTableColumns({
   documentTypes,
   visibleCustomFieldColumns,
+  visibleBuiltInFieldColumns,
   enabledBuiltInFields,
   builtInFieldWidths,
   getDocumentTypeName,
@@ -42,6 +49,7 @@ export function useTableColumns({
   selectedDocuments = new Set(),
   onTogglePin,
   onToggleSelect,
+  columnSpanning,
 }: ColumnOptions) {
   return useMemo<ColumnDef<Document>[]>(() => {
     const allBaseColumns: Record<string, ColumnDef<Document>> = {
@@ -206,19 +214,173 @@ export function useTableColumns({
       },
     };
 
-    // Filter base columns based on enabled built-in fields
-    const baseColumns: ColumnDef<Document>[] = Object.entries(allBaseColumns)
-      .filter(([id]) => enabledBuiltInFields.has(id))
-      .map(([, col]) => col);
+    // Helper function to get built-in field value
+    const getBuiltInFieldValue = (doc: Document, fieldId: string): any => {
+      switch (fieldId) {
+        case 'title':
+          return doc.title || doc.original_file_name || `Document ${doc.id}`;
+        case 'created':
+          return doc.created;
+        case 'added':
+          return doc.added;
+        case 'correspondent':
+          return doc.correspondent ? getCorrespondentName(doc.correspondent) : null;
+        case 'asn':
+          return doc.archive_serial_number;
+        case 'page_count':
+          return doc.page_count;
+        case 'fileSize':
+          return (doc as any).file_size || null;
+        case 'category':
+          return doc.document_type ? getDocumentTypeName(doc.document_type) : null;
+        case 'owner':
+          return (doc as any).owner_username || null;
+        case 'tags':
+          // Return tags as comma-separated string for list display, or array for direct rendering
+          if (!doc.tags || doc.tags.length === 0) return null;
+          return doc.tags.map(tagId => getTagName(tagId)).join(', ');
+        default:
+          return null;
+      }
+    };
+
+    // Generate built-in field columns using display types
+    const builtInFieldColumns: ColumnDef<Document>[] = (visibleBuiltInFieldColumns && visibleBuiltInFieldColumns.length > 0) ? visibleBuiltInFieldColumns.map(
+      ({ fieldId, displayType, columnWidth }) => {
+        const columnId = fieldId;
+        const configuredSpanning = columnSpanning?.[columnId] === true;
+        
+        // Helper function to get header name for built-in fields
+        const getBuiltInFieldHeader = (id: string): string => {
+          const headerMap: Record<string, string> = {
+            'category': 'Type',
+            'page_count': 'Pages',
+            'fileSize': 'File Size',
+            'created': 'Created Date',
+            'added': 'Added Date',
+            'correspondent': 'Correspondent',
+            'tags': 'Tags',
+          };
+          return headerMap[id] || id.charAt(0).toUpperCase() + id.slice(1);
+        };
+
+        // Helper function to get accessor key for built-in fields
+        const getBuiltInFieldAccessorKey = (id: string): string => {
+          if (id === 'category') return 'document_type';
+          if (id === 'asn') return 'archive_serial_number';
+          if (id === 'tags') return 'tags';
+          return id;
+        };
+
+        // Special handling for title column (always has icon)
+        if (fieldId === 'title') {
+          return {
+            id: columnId,
+            accessorKey: 'title',
+            header: 'Document Name',
+            enableSorting: true,
+            enableResizing: true,
+            minSize: columnWidth || 100,
+            size: columnWidth || builtInFieldWidths.get(fieldId) || 200,
+            meta: {
+              spanTwoRows: configuredSpanning,
+              showOnSecondRow: columnSpanning?.[`${fieldId}_secondRow`] === true,
+            },
+            cell: ({ row }) => {
+              const doc = row.original;
+              return (
+                <div className="flex items-start gap-2 min-w-0">
+                  <FeatherFileText className="text-heading-3 font-heading-3 text-error-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-body-bold font-body-bold text-default-font break-words whitespace-normal">
+                    {doc.title || doc.original_file_name || `Document ${doc.id}`}
+                  </span>
+                </div>
+              );
+            },
+          };
+        }
+        
+        // Special handling for tags - render as badges
+        if (fieldId === 'tags') {
+          return {
+            id: columnId,
+            accessorFn: (row) => row.tags,
+            header: 'Tags',
+            enableSorting: false,
+            enableResizing: true,
+            minSize: columnWidth || 150,
+            size: columnWidth || builtInFieldWidths.get(fieldId),
+            meta: {
+              spanTwoRows: configuredSpanning,
+              showOnSecondRow: columnSpanning?.[`${fieldId}_secondRow`] === true,
+            },
+            cell: ({ row }) => {
+              const doc = row.original;
+              if (!doc.tags || doc.tags.length === 0) {
+                return <span className="text-body font-body text-subtext-color">—</span>;
+              }
+              // Use list display type for tags
+              if (displayType === 'list') {
+                return (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {doc.tags.map((tagId) => (
+                      <Badge key={tagId} variant="neutral">
+                        {getTagName(tagId)}
+                      </Badge>
+                    ))}
+                  </div>
+                );
+              }
+              // Fallback to text display
+              return <CustomFieldDisplay value={doc.tags.map((tagId: number) => getTagName(tagId)).join(', ')} displayType={displayType} />;
+            },
+          };
+        }
+        
+        // For other built-in fields, use generic rendering with display types
+        return {
+          id: columnId,
+          accessorKey: fieldId === 'category' ? 'document_type' : fieldId === 'asn' ? 'archive_serial_number' : fieldId,
+          header: fieldId === 'category' ? 'Type' : fieldId === 'page_count' ? 'Pages' : fieldId === 'fileSize' ? 'File Size' : fieldId === 'created' ? 'Created Date' : fieldId === 'added' ? 'Added Date' : fieldId === 'correspondent' ? 'Correspondent' : fieldId.charAt(0).toUpperCase() + fieldId.slice(1),
+          enableSorting: ['title', 'created', 'added', 'asn', 'page_count', 'category'].includes(fieldId),
+          enableResizing: true,
+          minSize: columnWidth || (fieldId === 'asn' || fieldId === 'page_count' ? 80 : 150),
+          size: columnWidth || builtInFieldWidths.get(fieldId),
+          meta: {
+            spanTwoRows: configuredSpanning,
+          },
+          cell: ({ row }) => {
+            const value = getBuiltInFieldValue(row.original, fieldId);
+            if (value === null || value === undefined || value === '') {
+              return <span className="text-body font-body text-subtext-color">—</span>;
+            }
+            // Use CustomFieldDisplay for consistent rendering
+            return <CustomFieldDisplay value={value} displayType={displayType} />;
+          },
+        };
+      }
+    ) : [];
+
+    // Filter base columns based on enabled built-in fields (for backwards compatibility)
+    // But prefer using builtInFieldColumns which uses display types
+    const baseColumns: ColumnDef<Document>[] = builtInFieldColumns.length > 0 
+      ? builtInFieldColumns 
+      : Object.entries(allBaseColumns)
+          .filter(([id]) => enabledBuiltInFields.has(id))
+          .map(([, col]) => col);
 
     // Add custom field columns
     const customFieldColumns: ColumnDef<Document>[] = visibleCustomFieldColumns.map(
       ({ field, displayType, columnWidth }) => {
-        // Check if this column should span two rows (Named Entities or Topic/Concepts)
-        const shouldSpanTwoRows = field.name === 'Named Entities' || field.name === 'Topics / Concepts' || field.name === 'Summary';
+        // Check if this column should span two rows or show on second row
+        const columnId = `customField_${field.id}`;
+        const configuredSpanning = columnSpanning?.[columnId] === true || columnSpanning?.[String(field.id)] === true;
+        const secondRowKey = `${columnId}_secondRow`;
+        const configuredShowOnSecondRow = columnSpanning?.[secondRowKey] === true;
+        const shouldSpanTwoRows = configuredSpanning || (field.name === 'Named Entities' || field.name === 'Topics / Concepts' || field.name === 'Summary');
         
         return {
-          id: `customField_${field.id}`,
+          id: columnId,
           accessorFn: (row) => getCustomFieldValue(row, field.id!),
           header: field.name,
           enableSorting: false,
@@ -228,6 +390,7 @@ export function useTableColumns({
           size: columnWidth,
           meta: {
             spanTwoRows: shouldSpanTwoRows,
+            showOnSecondRow: configuredShowOnSecondRow,
           },
           cell: ({ row }) => {
             const rawValue = getCustomFieldValue(row.original, field.id!);
@@ -249,6 +412,9 @@ export function useTableColumns({
       enableHiding: false,
       size: 80,
       minSize: 80,
+      meta: {
+        spanTwoRows: columnSpanning?.['pin-select'] === true,
+      },
       cell: ({ row }) => {
         const doc = row.original;
         const docId = doc.id;
@@ -288,6 +454,6 @@ export function useTableColumns({
     };
 
     return [pinSelectColumn, ...baseColumns, ...customFieldColumns];
-  }, [documentTypes, visibleCustomFieldColumns, enabledBuiltInFields, builtInFieldWidths, getDocumentTypeName, getTagName, getCorrespondentName, pinnedDocuments, selectedDocuments, onTogglePin, onToggleSelect]);
+  }, [documentTypes, visibleCustomFieldColumns, enabledBuiltInFields, builtInFieldWidths, getDocumentTypeName, getTagName, getCorrespondentName, pinnedDocuments, selectedDocuments, onTogglePin, onToggleSelect, columnSpanning]);
 }
 

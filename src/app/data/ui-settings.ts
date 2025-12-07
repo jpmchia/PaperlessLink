@@ -96,8 +96,18 @@ export const SETTINGS_KEYS = {
   CUSTOM_FIELD_TABS_LIST: 'general-settings:documents:custom-field:tabs-list',
   CUSTOM_FIELD_DISPLAY_ORDER: 'general-settings:documents:custom-field:display-order',
   CUSTOM_FIELD_COLUMN_WIDTH_PREFIX: 'general-settings:documents:custom-field:column-width:',
+  CUSTOM_FIELD_SPAN_BOTH_ROWS_PREFIX: 'general-settings:documents:custom-field:span-both-rows:',
+  CUSTOM_FIELD_SHOW_ON_SECOND_ROW_PREFIX: 'general-settings:documents:custom-field:show-on-second-row:',
   DOCUMENT_LIST_COLUMN_ORDER: 'general-settings:documents:list:column-order',
   BUILT_IN_FIELD_TABLE_COLUMN_PREFIX: 'general-settings:documents:built-in-field:table-column:',
+  BUILT_IN_FIELD_SPAN_BOTH_ROWS_PREFIX: 'general-settings:documents:built-in-field:span-both-rows:',
+  BUILT_IN_FIELD_SHOW_ON_SECOND_ROW_PREFIX: 'general-settings:documents:built-in-field:show-on-second-row:',
+  BUILT_IN_FIELD_FILTER_PREFIX: 'general-settings:documents:built-in-field:filter:',
+  BUILT_IN_FIELD_FILTER_TYPE_PREFIX: 'general-settings:documents:built-in-field:filter-type:',
+  BUILT_IN_FIELD_TABLE_DISPLAY_TYPE_PREFIX: 'general-settings:documents:built-in-field:table-display-type:',
+  BUILT_IN_FIELD_EDIT_MODE_PREFIX: 'general-settings:documents:built-in-field:edit-mode:',
+  BUILT_IN_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX: 'general-settings:documents:built-in-field:edit-mode-entry-type:',
+  BUILT_IN_FIELD_TAB_PREFIX: 'general-settings:documents:built-in-field:tab:',
 }
 
 export const SETTINGS: UiSetting[] = [

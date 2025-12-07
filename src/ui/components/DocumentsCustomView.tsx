@@ -4,7 +4,7 @@
  * TODO: Replace this placeholder with the actual exported code from Subframe
  */
 
-import React, { useMemo, useRef, useCallback } from "react";
+import React, { useMemo, useRef, useCallback, useEffect } from "react";
 import { DefaultPageLayout } from "@/ui/layouts/DefaultPageLayout";
 import { EnhancedTable } from "@/ui/components/EnhancedTable";
 import { Button } from "@/ui/components/Button";
@@ -17,7 +17,8 @@ import { useTableState } from "./documents/useTableState";
 import { useTableColumns } from "./documents/useTableColumns";
 import { FilterBar } from "./documents/FilterBar";
 import { DocumentPreviewPanel } from "./documents/DocumentPreviewPanel";
-import { createLookupMaps } from "./documents/documentUtils";
+import { createLookupMaps, getCustomFieldValue } from "./documents/documentUtils";
+import { Badge } from "@/ui/components/Badge";
 import { DocumentsCustomViewHeader } from "./documents/components/DocumentsCustomViewHeader";
 import { useSettingsSync } from "./documents/hooks/useSettingsSync";
 import { useCustomViewManagement } from "./documents/hooks/useCustomViewManagement";
@@ -81,12 +82,15 @@ export function DocumentsCustomView() {
     originalColumnOrder,
     originalColumnVisibility,
     originalFilterVisibility,
+    originalColumnSpanning,
     pendingColumnOrder,
     setPendingColumnOrder,
     pendingColumnVisibility,
     setPendingColumnVisibility,
     pendingFilterVisibility,
     setPendingFilterVisibility,
+    pendingColumnSpanning,
+    setPendingColumnSpanning,
     isSaving,
     setIsSaving,
     updateCustomView,
@@ -105,6 +109,7 @@ export function DocumentsCustomView() {
   });
   const {
     visibleCustomFieldColumns,
+    visibleBuiltInFieldColumns,
     columnOrderFromSettings,
     columnVisibilityFromSettings,
     enabledBuiltInFields,
@@ -122,6 +127,17 @@ export function DocumentsCustomView() {
     }
     return {};
   }, [appliedCustomView, pendingFilterVisibility]);
+
+  // Column spanning from settings
+  const columnSpanningFromSettings = useMemo(() => {
+    if (pendingColumnSpanning !== null) {
+      return pendingColumnSpanning;
+    }
+    if (appliedCustomView?.column_spanning) {
+      return appliedCustomView.column_spanning;
+    }
+    return {};
+  }, [appliedCustomView, pendingColumnSpanning]);
 
   const { filters, filterVisibility: globalFilterVisibility, updateFilter, updateFilterVisibility } = useDocumentFilters();
   
@@ -219,6 +235,7 @@ export function DocumentsCustomView() {
   const baseColumns = useTableColumns({
     documentTypes,
     visibleCustomFieldColumns,
+    visibleBuiltInFieldColumns,
     enabledBuiltInFields,
     builtInFieldWidths,
     getDocumentTypeName,
@@ -228,6 +245,7 @@ export function DocumentsCustomView() {
     selectedDocuments,
     onTogglePin: handleTogglePin,
     onToggleSelect: handleToggleSelect,
+    columnSpanning: appliedCustomView?.column_spanning,
   });
 
   // Document actions
@@ -253,6 +271,7 @@ export function DocumentsCustomView() {
     onDownload: handleDownloadDocument,
     onDelete: handleDeleteDocument,
     deletingDocId,
+    columnSpanning: appliedCustomView?.column_spanning,
   });
   const { columns, tanStackColumnOrder } = tableColumnsResult;
 
@@ -316,6 +335,9 @@ export function DocumentsCustomView() {
     originalColumnVisibility,
     filterVisibilityFromSettings,
     originalFilterVisibility,
+    pendingColumnSpanning,
+    columnSpanningFromSettings,
+    originalColumnSpanning,
   });
 
   // Custom view actions (save/revert/save-as)
@@ -326,18 +348,22 @@ export function DocumentsCustomView() {
     pendingColumnOrder,
     pendingColumnVisibility,
     pendingFilterVisibility,
+    pendingColumnSpanning,
     originalColumnSizing,
     originalColumnOrder,
     originalColumnVisibility,
     originalFilterVisibility,
+    originalColumnSpanning,
     setIsSaving,
     setPendingColumnOrder,
     setPendingColumnVisibility,
     setPendingFilterVisibility,
+    setPendingColumnSpanning,
     setOriginalColumnSizing: customViewManagement.setOriginalColumnSizing || (() => {}),
     setOriginalColumnOrder: customViewManagement.setOriginalColumnOrder || (() => {}),
     setOriginalColumnVisibility: customViewManagement.setOriginalColumnVisibility || (() => {}),
     setOriginalFilterVisibility: customViewManagement.setOriginalFilterVisibility || (() => {}),
+    setOriginalColumnSpanning: customViewManagement.setOriginalColumnSpanning || (() => {}),
     setSelectedCustomViewId,
     updateCustomView,
     createCustomView: async (data: Partial<CustomView>) => {
@@ -381,6 +407,42 @@ export function DocumentsCustomView() {
       setPendingFilterVisibility(updatedFilterVisibility);
     }
   }, [updateFilterVisibility, appliedCustomView, selectedCustomViewId, pendingFilterVisibility, setPendingFilterVisibility]);
+
+  // Column spanning change handler
+  const handleColumnSpanningChange = useCallback((spanning: Record<string, boolean>, viewId?: number | string) => {
+    if (appliedCustomView && selectedCustomViewId && typeof selectedCustomViewId === 'number') {
+      // Only update pending state if this is the currently applied view
+      const isCurrentView = viewId ? viewId === selectedCustomViewId : appliedCustomView.id === selectedCustomViewId;
+      if (isCurrentView) {
+        console.log('[DocumentsCustomView] Column spanning changed, updating pending state:', {
+          viewId,
+          selectedCustomViewId,
+          appliedViewId: appliedCustomView.id,
+          spanning,
+        });
+        setPendingColumnSpanning(spanning);
+      } else {
+        console.log('[DocumentsCustomView] Column spanning changed but not for current view:', {
+          viewId,
+          selectedCustomViewId,
+          appliedViewId: appliedCustomView.id,
+        });
+      }
+    }
+  }, [appliedCustomView, selectedCustomViewId, setPendingColumnSpanning]);
+
+  // Listen for column spanning changes from settings modal
+  useEffect(() => {
+    const handleColumnSpanningChangeEvent = (e: CustomEvent<{ spanning: Record<string, boolean>; viewId?: number | string }>) => {
+      handleColumnSpanningChange(e.detail.spanning, e.detail.viewId);
+    };
+    
+    window.addEventListener('columnSpanningChanged', handleColumnSpanningChangeEvent as EventListener);
+    
+    return () => {
+      window.removeEventListener('columnSpanningChanged', handleColumnSpanningChangeEvent as EventListener);
+    };
+  }, [handleColumnSpanningChange]);
 
   const handleCustomFieldFilterVisibilityChange = useCallback((fieldId: number, visible: boolean) => {
     if (appliedCustomView && selectedCustomViewId && typeof selectedCustomViewId === 'number') {
@@ -510,6 +572,44 @@ export function DocumentsCustomView() {
                 enableColumnResizing={true}
                 enableColumnReordering={false}
                 enableColumnVisibility={false}
+                renderSubRow={appliedCustomView?.subrow_enabled ? ((doc) => {
+                  const subrowContent = appliedCustomView.subrow_content || 'summary';
+                  
+                  if (subrowContent === 'none') {
+                    return null;
+                  }
+                  
+                  if (subrowContent === 'summary') {
+                    // Find Summary field
+                    const summaryField = customFields.find(f => f.name === 'Summary');
+                    if (!summaryField || !summaryField.id) return null;
+                    
+                    // Get summary value
+                    const summaryValue = getCustomFieldValue(doc, summaryField.id);
+                    if (!summaryValue || summaryValue === '') return null;
+                    
+                    return (
+                      <div className="text-body font-body text-neutral-500 break-words whitespace-normal">
+                        {String(summaryValue)}
+                      </div>
+                    );
+                  }
+                  
+                  if (subrowContent === 'tags') {
+                    if (!doc.tags || doc.tags.length === 0) return null;
+                    return (
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {doc.tags.map((tagId) => (
+                          <Badge key={tagId} variant="neutral">
+                            {getTagName(tagId)}
+                          </Badge>
+                        ))}
+                      </div>
+                    );
+                  }
+                  
+                  return null;
+                }) : undefined}
                 initialState={tableInitialState}
                 onStateChange={onStateChange}
               />

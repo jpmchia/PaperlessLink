@@ -12,6 +12,7 @@ interface UseTableColumnsWithActionsOptions {
   onDownload: (docId: number | undefined) => void;
   onDelete: (docId: number | undefined) => void;
   deletingDocId: number | null;
+  columnSpanning?: Record<string, boolean>; // Map of column ID to whether it spans two rows
 }
 
 /**
@@ -24,8 +25,12 @@ export function useTableColumnsWithActions({
   onDownload,
   onDelete,
   deletingDocId,
+  columnSpanning,
 }: UseTableColumnsWithActionsOptions): { columns: ColumnDef<Document>[]; tanStackColumnOrder: string[] } {
   const columns = useMemo(() => {
+    // Check if actions column should span two rows
+    const actionsShouldSpan = columnSpanning?.['actions'] === true;
+    
     const actionsColumn: ColumnDef<Document> = {
       id: "actions",
       header: "",
@@ -33,6 +38,10 @@ export function useTableColumnsWithActions({
       enableResizing: false,
       enableHiding: false,
       size: 50,
+      meta: {
+        spanTwoRows: actionsShouldSpan,
+        renderInSubRow: !actionsShouldSpan, // Actions column only renders in subrow if not spanning
+      },
       cell: ({ row }) => {
         const doc = row.original;
         return (
@@ -121,7 +130,7 @@ export function useTableColumnsWithActions({
     }
 
     return allColumns;
-  }, [baseColumns, columnOrderFromSettings, onView, onDownload, onDelete, deletingDocId]);
+  }, [baseColumns, columnOrderFromSettings, onView, onDownload, onDelete, deletingDocId, columnSpanning]);
 
   // Compute TanStack Table column order from the ordered columns
   const tanStackColumnOrder = useMemo(() => {

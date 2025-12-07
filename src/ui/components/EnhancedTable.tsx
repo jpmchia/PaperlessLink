@@ -56,7 +56,8 @@ export function EnhancedTable<TData extends Record<string, any>>({
   renderSubRow,
   initialState,
   onStateChange,
-}: EnhancedTableProps<TData>) {
+  summaryFieldName,
+}: EnhancedTableProps<TData> & { summaryFieldName?: string }) {
   const [sorting, setSorting] = React.useState<SortingState>(
     initialState?.sorting || []
   );
@@ -171,32 +172,117 @@ export function EnhancedTable<TData extends Record<string, any>>({
             })}
           </colgroup>
           <thead className="sticky top-0 z-[1] bg-default-background">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <Table.HeaderRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  const column = header.column;
-                  const canSort = enableSorting && column.getCanSort();
-                  const sortDirection = column.getIsSorted();
-                  const isResizing = column.getIsResizing();
+            {table.getHeaderGroups().map((headerGroup) => {
+              // Detect which columns have fields rendering on second row
+              const visibleHeaders = headerGroup.headers;
+              
+              // Find fields that render on second row (via showOnSecondRow meta)
+              const secondRowFields = visibleHeaders
+                .map((h, idx) => {
+                  const meta = h.column.columnDef.meta as { showOnSecondRow?: boolean } | undefined;
+                  if (meta?.showOnSecondRow === true) {
+                    const headerText = h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext());
+                    return { index: idx, headerText, columnId: h.column.id };
+                  }
+                  return null;
+                })
+                .filter((item): item is { index: number; headerText: React.ReactNode; columnId: string } => item !== null);
+              
+              // Find where Summary renders (via renderSubRow) - under first rowspan=1 column
+              let summaryStartHeaderIndex = -1;
+              let summaryFieldName: string | null = null;
+              
+              if (renderSubRow) {
+                // Find the first header that doesn't span two rows (where Summary would start)
+                summaryStartHeaderIndex = visibleHeaders.findIndex((h) => {
+                  const meta = h.column.columnDef.meta as { spanTwoRows?: boolean; renderInSubRow?: boolean } | undefined;
+                  const shouldSpan = meta?.spanTwoRows === true;
+                  const renderInSubRow = meta?.renderInSubRow === true;
+                  return !shouldSpan && !(renderInSubRow && h.column.id === 'actions');
+                });
+                
+                // Try to detect Summary field name from columns
+                if (summaryStartHeaderIndex >= 0) {
+                  // Check if there's a Summary custom field column
+                  const summaryColumn = visibleHeaders.find(h => {
+                    const id = h.column.id;
+                    return id.startsWith('customField_') && 
+                           (typeof h.column.columnDef.header === 'string' ? h.column.columnDef.header : '') === 'Summary';
+                  });
+                  
+                  if (summaryColumn) {
+                    summaryFieldName = typeof summaryColumn.column.columnDef.header === 'string' 
+                      ? summaryColumn.column.columnDef.header 
+                      : 'Summary';
+                  } else {
+                    // Fallback: assume Summary if renderSubRow is provided
+                    summaryFieldName = 'Summary';
+                  }
+                }
+              }
+              
+              // Build map of header index to second-row field names
+              const headerToSecondRowFields = new Map<number, string[]>();
+              
+              if (secondRowFields.length > 0) {
+                // Find the first rowspan=1 header where second-row fields render
+                const firstRowspan1HeaderIndex = visibleHeaders.findIndex((h) => {
+                  const meta = h.column.columnDef.meta as { spanTwoRows?: boolean; renderInSubRow?: boolean } | undefined;
+                  const shouldSpan = meta?.spanTwoRows === true;
+                  const renderInSubRow = meta?.renderInSubRow === true;
+                  return !shouldSpan && !(renderInSubRow && h.column.id === 'actions');
+                });
+                
+                if (firstRowspan1HeaderIndex >= 0) {
+                  const fieldNames = secondRowFields.map(f => {
+                    const headerText = typeof f.headerText === 'string' ? f.headerText : String(f.headerText);
+                    return headerText;
+                  });
+                  headerToSecondRowFields.set(firstRowspan1HeaderIndex, fieldNames);
+                }
+              }
+              
+              // Add Summary to the map if it renders via renderSubRow
+              if (summaryStartHeaderIndex >= 0 && summaryFieldName) {
+                const existing = headerToSecondRowFields.get(summaryStartHeaderIndex) || [];
+                headerToSecondRowFields.set(summaryStartHeaderIndex, [...existing, summaryFieldName]);
+              }
+              
+              return (
+                <Table.HeaderRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header, headerIndex) => {
+                    const column = header.column;
+                    const canSort = enableSorting && column.getCanSort();
+                    const sortDirection = column.getIsSorted();
+                    const isResizing = column.getIsResizing();
+                    
+                    // Get base header text
+                    const baseHeader = header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext());
+                    
+                    // Check if this header has second-row fields rendering under it
+                    const secondRowFieldNames = headerToSecondRowFields.get(headerIndex);
+                    const displayHeader = secondRowFieldNames && secondRowFieldNames.length > 0 && baseHeader
+                      ? `${String(baseHeader)} / ${secondRowFieldNames.join(' / ')}`
+                      : baseHeader;
 
-                  return (
-                    <Table.HeaderCell
-                      key={header.id}
-                      className="overflow-hidden"
-                      style={{
-                        width: `${header.getSize()}px`,
-                        minWidth: `${column.columnDef.minSize || 50}px`,
-                        maxWidth: column.columnDef.maxSize ? `${column.columnDef.maxSize}px` : undefined,
-                        position: "relative",
-                      }}
-                    >
-                      <div className="flex items-center gap-1 w-full min-w-0 relative">
-                        <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden pr-2">
-                          <div className="truncate">
-                            {header.isPlaceholder
-                              ? null
-                              : flexRender(header.column.columnDef.header, header.getContext())}
-                          </div>
+                    return (
+                      <Table.HeaderCell
+                        key={header.id}
+                        className="overflow-hidden"
+                        style={{
+                          width: `${header.getSize()}px`,
+                          minWidth: `${column.columnDef.minSize || 50}px`,
+                          maxWidth: column.columnDef.maxSize ? `${column.columnDef.maxSize}px` : undefined,
+                          position: "relative",
+                        }}
+                      >
+                        <div className="flex items-center gap-1 w-full min-w-0 relative">
+                          <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden pr-2">
+                            <div className="truncate">
+                              {displayHeader}
+                            </div>
                           {canSort && (
                             <button
                               onClick={header.column.getToggleSortingHandler()}
@@ -252,7 +338,8 @@ export function EnhancedTable<TData extends Record<string, any>>({
                   );
                 })}
               </Table.HeaderRow>
-            ))}
+              );
+            })}
           </thead>
           <tbody className="border-b border-solid border-neutral-border">
             {loading ? (
@@ -275,9 +362,28 @@ export function EnhancedTable<TData extends Record<string, any>>({
               </Table.Row>
             ) : (
               table.getRowModel().rows.map((row, rowIndex) => {
-                const hasSubRow = renderSubRow && renderSubRow(row.original);
-                const isLastRow = rowIndex === table.getRowModel().rows.length - 1;
                 const visibleCells = row.getVisibleCells();
+                
+                // Check if there's an actions column that should render in subrow
+                const hasActionsInSubRow = visibleCells.some(cell => {
+                  const meta = cell.column.columnDef.meta as { renderInSubRow?: boolean } | undefined;
+                  return cell.column.id === 'actions' && meta?.renderInSubRow === true;
+                });
+                
+                // Check if any cells should render on second row
+                const hasSecondRowCells = visibleCells.some(cell => {
+                  const meta = cell.column.columnDef.meta as { showOnSecondRow?: boolean } | undefined;
+                  return meta?.showOnSecondRow === true;
+                });
+                
+                // Check if renderSubRow returns content (legacy support for subrow_content setting)
+                const subRowContent = renderSubRow ? renderSubRow(row.original) : null;
+                const hasSubRowContent = subRowContent !== null && subRowContent !== undefined;
+                
+                // Always render subrow if actions should appear in subrow, if there are second-row cells, or if there's legacy subrow content
+                const hasSubRow = hasActionsInSubRow || hasSecondRowCells || hasSubRowContent;
+                
+                const isLastRow = rowIndex === table.getRowModel().rows.length - 1;
                 
                 // Find columns that should span two rows (check meta property)
                 const columnsSpanningTwoRows = visibleCells.filter(cell => {
@@ -295,11 +401,36 @@ export function EnhancedTable<TData extends Record<string, any>>({
                       clickable={!!onRowClick}
                       onClick={() => onRowClick?.(row.original)}
                       style={{ height: '1.5rem' }}
-                      className={hasSubRow ? "h-[1.5rem] border-b-0" : "h-[1.5rem]"}
+                      className={hasSubRow ? "h-[1.25rem] border-b-0" : "h-[1.25rem]"}
                     >
                       {visibleCells.map((cell) => {
-                        const meta = cell.column.columnDef.meta as { spanTwoRows?: boolean } | undefined;
-                        const shouldSpanTwoRows = meta?.spanTwoRows === true && hasSubRow;
+                        const meta = cell.column.columnDef.meta as { spanTwoRows?: boolean; renderInSubRow?: boolean; showOnSecondRow?: boolean } | undefined;
+                        const shouldSpanTwoRows = meta?.spanTwoRows === true;
+                        const renderInSubRow = meta?.renderInSubRow === true;
+                        const showOnSecondRow = meta?.showOnSecondRow === true;
+                        
+                        // Skip cells that should render on second row - they'll be rendered in subrow
+                        if (showOnSecondRow && hasSubRow) {
+                          return null;
+                        }
+                        
+                        // Render empty cell for actions column in main row if there's a subrow
+                        if (renderInSubRow && hasSubRow) {
+                          return (
+                            <Table.Cell
+                              key={cell.id}
+                              className="overflow-hidden"
+                              style={{
+                                width: `${cell.column.getSize()}px`,
+                                minWidth: `${cell.column.getSize()}px`,
+                              }}
+                            />
+                          );
+                        }
+                        
+                        // Calculate rowspan: 2 if spanning both rows and there's a subrow, otherwise 1 (or undefined)
+                        const rowSpan = shouldSpanTwoRows && hasSubRow ? 2 : undefined;
+                        
                         return (
                           <Table.Cell
                             key={cell.id}
@@ -307,9 +438,9 @@ export function EnhancedTable<TData extends Record<string, any>>({
                             style={{
                               width: `${cell.column.getSize()}px`,
                               minWidth: `${cell.column.getSize()}px`,
-                              maxHeight: shouldSpanTwoRows ? '3rem' : undefined, // 2x row height (1.5rem * 2)
+                              maxHeight: rowSpan === 2 ? '3rem' : undefined, // 2x row height (1.5rem * 2)
                             }}
-                            rowSpan={shouldSpanTwoRows ? 2 : undefined}
+                            rowSpan={rowSpan}
                           >
                             <div className={cell.column.id === 'title' ? "min-w-0" : "min-w-0 overflow-hidden"}>
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -320,24 +451,201 @@ export function EnhancedTable<TData extends Record<string, any>>({
                     </Table.Row>
                     {hasSubRow && (
                       <Table.Row className={isLastRow ? "border-t-0 border-b border-solid border-neutral-border" : "border-t-0"}>
-                        {/* Only render cells for columns that don't span two rows
-                            The cells that span two rows will automatically be handled by rowSpan */}
-                        {columnsNotSpanningTwoRows.length > 0 ? (
-                          <Table.Cell
-                            colSpan={columnsNotSpanningTwoRows.length}
-                            className="pt-0 pb-2 pl-10"
-                          >
-                            {renderSubRow(row.original)}
-                          </Table.Cell>
-                        ) : (
-                          // If all columns span two rows, still need to render something for the subrow
-                          <Table.Cell
-                            colSpan={visibleCells.length}
-                            className="pt-0 pb-2 pl-10"
-                          >
-                            {renderSubRow(row.original)}
-                          </Table.Cell>
-                        )}
+                        {/* Render cells aligned with columns
+                            - Columns that span two rows are already rendered in the first row with rowSpan=2
+                            - Actions column only renders in subrow (in first column position, aligned with pin-select)
+                            - Summary spans from pin-select to title (or beyond if no spanning columns) */}
+                        {(() => {
+                          // Find actions column (if it exists and should render in subrow)
+                          const actionsCell = visibleCells.find(c => {
+                            const cMeta = c.column.columnDef.meta as { renderInSubRow?: boolean } | undefined;
+                            return c.column.id === 'actions' && cMeta?.renderInSubRow === true;
+                          });
+                          
+                          // Find cells that should render on second row
+                          const secondRowCells = visibleCells.filter(c => {
+                            const cMeta = c.column.columnDef.meta as { showOnSecondRow?: boolean } | undefined;
+                            return cMeta?.showOnSecondRow === true;
+                          });
+                          
+                          // Calculate cells with rowspan = 1 (not spanning two rows)
+                          const cellsWithRowspan1 = visibleCells.filter((cell) => {
+                            const meta = cell.column.columnDef.meta as { spanTwoRows?: boolean; renderInSubRow?: boolean; showOnSecondRow?: boolean } | undefined;
+                            const shouldSpanTwoRows = meta?.spanTwoRows === true;
+                            const renderInSubRow = meta?.renderInSubRow === true;
+                            const showOnSecondRow = meta?.showOnSecondRow === true;
+                            // Count cells that don't span two rows and aren't actions/second-row cells
+                            return !shouldSpanTwoRows && !(renderInSubRow && cell.column.id === 'actions') && !showOnSecondRow;
+                          });
+                          
+                          // Calculate colspan for second-row cells: number of cells with rowspan = 1
+                          const secondRowColSpan = cellsWithRowspan1.length;
+                          
+                          let summaryRendered = false;
+                          let secondRowRendered = false;
+                          
+                          // For legacy renderSubRow support: find where Summary should render
+                          // Summary should render under the first rowspan=1 cell (typically Document Name/title)
+                          let summaryStartCellIndex = -1;
+                          let summaryColSpan = 0;
+                          
+                          if (hasSubRowContent && secondRowCells.length === 0) {
+                            // Find the first cell with rowspan = 1 (this is where Summary should start)
+                            summaryStartCellIndex = visibleCells.findIndex((c) => {
+                              const cMeta = c.column.columnDef.meta as { spanTwoRows?: boolean; renderInSubRow?: boolean; showOnSecondRow?: boolean } | undefined;
+                              const cShouldSpan = cMeta?.spanTwoRows === true;
+                              const cRenderInSubRow = cMeta?.renderInSubRow === true;
+                              const cShowOnSecondRow = cMeta?.showOnSecondRow === true;
+                              return !cShouldSpan && !(cRenderInSubRow && c.column.id === 'actions') && !cShowOnSecondRow;
+                            });
+                            
+                            if (summaryStartCellIndex >= 0) {
+                              // Calculate how many rowspan=1 cells come after the start position (including the start cell)
+                              for (let i = summaryStartCellIndex; i < visibleCells.length; i++) {
+                                const c = visibleCells[i];
+                                const cMeta = c.column.columnDef.meta as { spanTwoRows?: boolean; renderInSubRow?: boolean; showOnSecondRow?: boolean } | undefined;
+                                const cShouldSpan = cMeta?.spanTwoRows === true;
+                                const cRenderInSubRow = cMeta?.renderInSubRow === true;
+                                const cShowOnSecondRow = cMeta?.showOnSecondRow === true;
+                                
+                                // Count cells that don't span two rows and aren't actions/second-row cells
+                                if (!cShouldSpan && !(cRenderInSubRow && c.column.id === 'actions') && !cShowOnSecondRow) {
+                                  summaryColSpan++;
+                                }
+                              }
+                            }
+                          }
+                          
+                          // Track actual rendered position (accounting for skipped spanning columns)
+                          let actualRenderedIndex = 0;
+                          
+                          return visibleCells.map((cell, cellIndex) => {
+                            const meta = cell.column.columnDef.meta as { spanTwoRows?: boolean; renderInSubRow?: boolean; showOnSecondRow?: boolean } | undefined;
+                            const shouldSpanTwoRows = meta?.spanTwoRows === true;
+                            const renderInSubRow = meta?.renderInSubRow === true;
+                            const showOnSecondRow = meta?.showOnSecondRow === true;
+                            
+                            // Skip columns that span two rows - they're already rendered in the first row
+                            if (shouldSpanTwoRows) {
+                              return null;
+                            }
+                            
+                            // Render actions in the first column position (aligned with pin-select)
+                            if (actualRenderedIndex === 0 && actionsCell) {
+                              actualRenderedIndex++;
+                              return (
+                                <Table.Cell
+                                  key={`actions-${cell.id}`}
+                                  className="pt-0 pb-2 align-top"
+                                  style={{
+                                    width: `${cell.column.getSize()}px`,
+                                    minWidth: `${cell.column.getSize()}px`,
+                                  }}
+                                >
+                                  <div className="flex items-start justify-center">
+                                    {flexRender(actionsCell.column.columnDef.cell, actionsCell.getContext())}
+                                  </div>
+                                </Table.Cell>
+                              );
+                            }
+                            
+                            // Skip actions column in its own position (it's already rendered above)
+                            if (renderInSubRow && cell.column.id === 'actions') {
+                              return null;
+                            }
+                            
+                            // Render fields that should show on second row
+                            if (showOnSecondRow && !secondRowRendered) {
+                              // Find the first cell with rowspan = 1 to position second-row fields
+                              const firstRowspan1Index = visibleCells.findIndex((c, idx) => {
+                                const cMeta = c.column.columnDef.meta as { spanTwoRows?: boolean; renderInSubRow?: boolean; showOnSecondRow?: boolean } | undefined;
+                                const cShouldSpan = cMeta?.spanTwoRows === true;
+                                const cRenderInSubRow = cMeta?.renderInSubRow === true;
+                                const cShowOnSecondRow = cMeta?.showOnSecondRow === true;
+                                return !cShouldSpan && !(cRenderInSubRow && c.column.id === 'actions') && !cShowOnSecondRow;
+                              });
+                              
+                              // Render second-row cells at the position of the first rowspan=1 cell
+                              if (cellIndex === firstRowspan1Index) {
+                                secondRowRendered = true;
+                                actualRenderedIndex += secondRowColSpan;
+                                return (
+                                  <Table.Cell
+                                    key={`secondRow-${cell.id}`}
+                                    colSpan={secondRowColSpan}
+                                    className="pt-0 pb-2"
+                                  >
+                                    <div className="flex flex-wrap gap-2">
+                                      {secondRowCells.map((secondRowCell) => (
+                                        <div key={secondRowCell.id}>
+                                          {flexRender(secondRowCell.column.columnDef.cell, secondRowCell.getContext())}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </Table.Cell>
+                                );
+                              }
+                            }
+                            
+                            // Skip other second-row cells (they're rendered together above)
+                            if (showOnSecondRow) {
+                              return null;
+                            }
+                            
+                            // Legacy support: Render Summary via renderSubRow (if no second-row cells are configured)
+                            // Summary renders under the first rowspan=1 cell and spans all subsequent rowspan=1 cells
+                            if (!summaryRendered && hasSubRowContent && secondRowCells.length === 0 && cellIndex === summaryStartCellIndex) {
+                              summaryRendered = true;
+                              actualRenderedIndex += summaryColSpan;
+                              return (
+                                <Table.Cell
+                                  key={`summary-legacy-${cell.id}`}
+                                  colSpan={summaryColSpan}
+                                  className="pt-0 pb-2"
+                                >
+                                  {subRowContent}
+                                </Table.Cell>
+                              );
+                            }
+                            
+                            // Skip cells that are covered by legacy Summary's colSpan
+                            if (hasSubRowContent && summaryRendered && secondRowCells.length === 0) {
+                              if (summaryStartCellIndex >= 0 && cellIndex >= summaryStartCellIndex && cellIndex < summaryStartCellIndex + summaryColSpan) {
+                                return null; // This cell is covered by Summary's colspan
+                              }
+                            }
+                            
+                            // Increment actual rendered index for non-spanning cells
+                            actualRenderedIndex++;
+                            
+                            // Skip cells covered by second-row colspan
+                            if (secondRowCells.length > 0) {
+                              const firstRowspan1Index = visibleCells.findIndex((c) => {
+                                const cMeta = c.column.columnDef.meta as { spanTwoRows?: boolean; renderInSubRow?: boolean; showOnSecondRow?: boolean } | undefined;
+                                const cShouldSpan = cMeta?.spanTwoRows === true;
+                                const cRenderInSubRow = cMeta?.renderInSubRow === true;
+                                const cShowOnSecondRow = cMeta?.showOnSecondRow === true;
+                                return !cShouldSpan && !(cRenderInSubRow && c.column.id === 'actions') && !cShowOnSecondRow;
+                              });
+                              
+                              if (cellIndex >= firstRowspan1Index && cellIndex < firstRowspan1Index + secondRowColSpan) {
+                                return null;
+                              }
+                            }
+                            
+                            // For other non-spanning columns, render empty cells to maintain alignment
+                            return (
+                              <Table.Cell
+                                key={cell.id}
+                                className="pt-0 pb-2"
+                                style={{
+                                  width: `${cell.column.getSize()}px`,
+                                  minWidth: `${cell.column.getSize()}px`,
+                                }}
+                              />
+                            );
+                          });
+                        })()}
                       </Table.Row>
                     )}
                   </React.Fragment>

@@ -30,6 +30,13 @@ export interface CustomView extends ObjectWithPermissions {
   // Filter visibility - which filters are shown
   filter_visibility?: Record<string, boolean>
   
+  // Subrow configuration
+  subrow_enabled?: boolean  // Whether to show a subrow
+  subrow_content?: 'summary' | 'tags' | 'none'  // What content to display in subrow (default: 'summary')
+  
+  // Column spanning configuration - which columns should span two rows
+  column_spanning?: Record<string, boolean>  // Map of column ID to whether it spans two rows
+  
   // Sorting (optional - can use default)
   sort_field?: string
   sort_reverse?: boolean

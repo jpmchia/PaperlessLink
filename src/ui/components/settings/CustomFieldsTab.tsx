@@ -33,6 +33,7 @@ interface CustomFieldsTabProps {
   onSaveViewChanges?: () => Promise<void>;
   onRevertViewChanges?: () => Promise<void>;
   hasUnsavedViewChanges?: boolean;
+  onColumnSpanningChange?: (spanning: Record<string, boolean>) => void;
 }
 
 export function CustomFieldsTab({
@@ -56,6 +57,7 @@ export function CustomFieldsTab({
   onSaveViewChanges,
   onRevertViewChanges,
   hasUnsavedViewChanges = false,
+  onColumnSpanningChange,
 }: CustomFieldsTabProps) {
   // Local state for editing view name/description
   const [editingName, setEditingName] = useState("");
@@ -154,6 +156,61 @@ export function CustomFieldsTab({
         return currentView.column_sizing?.[sizingKey] || currentView.column_sizing?.[fieldId] || defaultValue;
       }
       
+      // Handle custom field span both rows
+      if (key.startsWith(SETTINGS_KEYS.CUSTOM_FIELD_SPAN_BOTH_ROWS_PREFIX)) {
+        const fieldId = key.replace(SETTINGS_KEYS.CUSTOM_FIELD_SPAN_BOTH_ROWS_PREFIX, '');
+        const spanningKey = `customField_${fieldId}`;
+        return currentView.column_spanning?.[spanningKey] || currentView.column_spanning?.[fieldId] || defaultValue;
+      }
+      
+      // Handle custom field show on second row
+      if (key.startsWith(SETTINGS_KEYS.CUSTOM_FIELD_SHOW_ON_SECOND_ROW_PREFIX)) {
+        const fieldId = key.replace(SETTINGS_KEYS.CUSTOM_FIELD_SHOW_ON_SECOND_ROW_PREFIX, '');
+        const secondRowKey = `customField_${fieldId}_secondRow`;
+        return currentView.column_spanning?.[secondRowKey] || defaultValue;
+      }
+      
+      // Handle built-in field span both rows
+      if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_SPAN_BOTH_ROWS_PREFIX)) {
+        const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_SPAN_BOTH_ROWS_PREFIX, '');
+        return currentView.column_spanning?.[fieldId] || defaultValue;
+      }
+      
+      // Handle built-in field show on second row
+      if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_SHOW_ON_SECOND_ROW_PREFIX)) {
+        const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_SHOW_ON_SECOND_ROW_PREFIX, '');
+        const secondRowKey = `${fieldId}_secondRow`;
+        return currentView.column_spanning?.[secondRowKey] || defaultValue;
+      }
+      
+      // Handle built-in field filter (these are global settings, not stored in custom views)
+      if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX)) {
+        const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX, '');
+        // Map to DOCUMENTS_FILTER_* keys
+        const filterKeyMapping: Record<string, string> = {
+          'created': SETTINGS_KEYS.DOCUMENTS_FILTER_DATE_RANGE,
+          'category': SETTINGS_KEYS.DOCUMENTS_FILTER_CATEGORY,
+          'correspondent': SETTINGS_KEYS.DOCUMENTS_FILTER_CORRESPONDENT,
+          'asn': SETTINGS_KEYS.DOCUMENTS_FILTER_ASN,
+          'owner': SETTINGS_KEYS.DOCUMENTS_FILTER_OWNER,
+        };
+        const mappedKey = filterKeyMapping[fieldId];
+        if (mappedKey) {
+          return getSetting(mappedKey, defaultValue);
+        }
+        return defaultValue;
+      }
+      
+      // Handle built-in field filter type (stored in custom view or global)
+      if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_TYPE_PREFIX)) {
+        // For now, filter types for built-in fields could be stored globally or in custom view
+        // We'll check custom view first, then fall back to global
+        const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_TYPE_PREFIX, '');
+        // Could store in a new field like filter_types, or use global settings
+        // For now, return from global settings
+        return getSetting(key, defaultValue);
+      }
+      
       // Handle custom field display order
       if (key === SETTINGS_KEYS.CUSTOM_FIELD_DISPLAY_ORDER) {
         // Extract custom field IDs from column_order
@@ -204,7 +261,7 @@ export function CustomFieldsTab({
       
       // Immediately update customViewsRef to ensure subsequent getSetting calls read the new value
       // This prevents stale reads during the same render cycle
-      const updateRefImmediately = (updatedData: Partial<CustomView>) => {
+      const updateRefImmediately = (updatedData: Partial<CustomView>, forceRemount = false) => {
         const updatedView = { ...currentView, ...updatedData };
         const updatedViews = customViewsRef.current.map(v => {
           if (v.id === currentView.id) {
@@ -213,9 +270,11 @@ export function CustomFieldsTab({
           return v;
         });
         customViewsRef.current = updatedViews;
-        // Force a re-render by incrementing counter
-        // This ensures allFields and other memoized values recalculate
-        setViewUpdateCounter(prev => prev + 1);
+        // Only force a remount if explicitly requested (e.g., for column order changes)
+        // For other changes like column spanning, just update the ref - React will re-render naturally
+        if (forceRemount) {
+          setViewUpdateCounter(prev => prev + 1);
+        }
       };
       
       if (key === SETTINGS_KEYS.DOCUMENT_LIST_COLUMN_ORDER) {
@@ -246,18 +305,20 @@ export function CustomFieldsTab({
           };
           
           // Update column_order - preserve existing order, don't move fields around
+          // Always use normalized format: "customField_{id}" for custom fields
+          const normalizedKey = visibilityKey; // Already in "customField_{id}" format
           if (value === true) {
-            // Add to order if not present
-            if (!currentOrder.includes(fieldId) && !currentOrder.includes(visibilityKey)) {
+            // Add to order if not present (check both formats for backward compatibility)
+            if (!currentOrder.includes(fieldId) && !currentOrder.includes(normalizedKey)) {
               // Simply append to the end to preserve existing order
               // The table will display fields in the order they appear in column_order
-              updateData.column_order = [...currentOrder, fieldId];
+              updateData.column_order = [...currentOrder, normalizedKey];
             }
             // If already in order, don't change it - preserve existing position
           } else {
-            // Remove from order
+            // Remove from order (check both formats for backward compatibility)
             updateData.column_order = currentOrder.filter(
-              id => id !== fieldId && id !== visibilityKey
+              id => String(id) !== String(fieldId) && String(id) !== normalizedKey
             );
           }
         }
@@ -277,6 +338,208 @@ export function CustomFieldsTab({
         updateData.column_sizing = {
           ...currentView.column_sizing,
           [sizingKey]: value,
+        };
+      } else if (key.startsWith(SETTINGS_KEYS.CUSTOM_FIELD_SPAN_BOTH_ROWS_PREFIX)) {
+        const fieldId = key.replace(SETTINGS_KEYS.CUSTOM_FIELD_SPAN_BOTH_ROWS_PREFIX, '');
+        const spanningKey = `customField_${fieldId}`;
+        const updatedSpanning = {
+          ...currentView.column_spanning || {},
+          [spanningKey]: value,
+        };
+        updateData.column_spanning = updatedSpanning;
+        // Update ref for immediate UI feedback (don't force remount to preserve scroll position)
+        updateRefImmediately({ column_spanning: updatedSpanning }, false);
+        // Notify parent component about column spanning change
+        if (onColumnSpanningChange) {
+          onColumnSpanningChange(updatedSpanning);
+        }
+        // Dispatch custom event for DocumentsCustomView to listen
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('columnSpanningChanged', { 
+            detail: { spanning: updatedSpanning, viewId: currentView.id } 
+          }));
+        }
+        // Continue to call onUpdateView to update localDraftViews (but don't save to backend immediately)
+      } else if (key.startsWith(SETTINGS_KEYS.CUSTOM_FIELD_SHOW_ON_SECOND_ROW_PREFIX)) {
+        // For now, we'll store this in column_spanning with a different key pattern
+        // In the future, we might want a dedicated field for subrow content configuration
+        const fieldId = key.replace(SETTINGS_KEYS.CUSTOM_FIELD_SHOW_ON_SECOND_ROW_PREFIX, '');
+        const secondRowKey = `customField_${fieldId}_secondRow`;
+        const updatedSpanning = {
+          ...currentView.column_spanning || {},
+          [secondRowKey]: value,
+        };
+        updateData.column_spanning = updatedSpanning;
+        // Update ref for immediate UI feedback (don't force remount to preserve scroll position)
+        updateRefImmediately({ column_spanning: updatedSpanning }, false);
+        // Notify parent component about column spanning change
+        if (onColumnSpanningChange) {
+          onColumnSpanningChange(updatedSpanning);
+        }
+        // Dispatch custom event for DocumentsCustomView to listen
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('columnSpanningChanged', { 
+            detail: { spanning: updatedSpanning, viewId: currentView.id } 
+          }));
+        }
+        // Continue to call onUpdateView to update localDraftViews (but don't save to backend immediately)
+      } else if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_SPAN_BOTH_ROWS_PREFIX)) {
+        const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_SPAN_BOTH_ROWS_PREFIX, '');
+        const updatedSpanning = {
+          ...currentView.column_spanning || {},
+          [fieldId]: value,
+        };
+        updateData.column_spanning = updatedSpanning;
+        // Update ref for immediate UI feedback (don't force remount to preserve scroll position)
+        updateRefImmediately({ column_spanning: updatedSpanning }, false);
+        // Notify parent component about column spanning change
+        if (onColumnSpanningChange) {
+          onColumnSpanningChange(updatedSpanning);
+        }
+        // Dispatch custom event for DocumentsCustomView to listen
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('columnSpanningChanged', { 
+            detail: { spanning: updatedSpanning, viewId: currentView.id } 
+          }));
+        }
+        // Continue to call onUpdateView to update localDraftViews (but don't save to backend immediately)
+      } else if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_SHOW_ON_SECOND_ROW_PREFIX)) {
+        const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_SHOW_ON_SECOND_ROW_PREFIX, '');
+        const secondRowKey = `${fieldId}_secondRow`;
+        const updatedSpanning = {
+          ...currentView.column_spanning || {},
+          [secondRowKey]: value,
+        };
+        updateData.column_spanning = updatedSpanning;
+        // Update ref for immediate UI feedback (don't force remount to preserve scroll position)
+        updateRefImmediately({ column_spanning: updatedSpanning }, false);
+        // Notify parent component about column spanning change
+        if (onColumnSpanningChange) {
+          onColumnSpanningChange(updatedSpanning);
+        }
+        // Dispatch custom event for DocumentsCustomView to listen
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('columnSpanningChanged', { 
+            detail: { spanning: updatedSpanning, viewId: currentView.id } 
+          }));
+        }
+        // Continue to call onUpdateView to update localDraftViews (but don't save to backend immediately)
+      } else if (key.startsWith(SETTINGS_KEYS.CUSTOM_FIELD_FILTER_PREFIX)) {
+        // Custom field filter visibility - stored in filter_visibility
+        const fieldId = key.replace(SETTINGS_KEYS.CUSTOM_FIELD_FILTER_PREFIX, '');
+        updateData.filter_visibility = {
+          ...currentView.filter_visibility,
+          [`customField_${fieldId}`]: value,
+        };
+      } else if (key.startsWith(SETTINGS_KEYS.CUSTOM_FIELD_FILTER_TYPE_PREFIX)) {
+        // Custom field filter type - stored in filter_visibility or could be a new field
+        // For now, trigger view update for change detection
+        const fieldId = key.replace(SETTINGS_KEYS.CUSTOM_FIELD_FILTER_TYPE_PREFIX, '');
+        updateSetting(key, value);
+        // Trigger view update for change detection
+        if (!updateData.filter_visibility) {
+          updateData.filter_visibility = {
+            ...currentView.filter_visibility,
+          };
+        }
+      } else if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX)) {
+        // Built-in field filters are global settings, map to DOCUMENTS_FILTER_* keys
+        const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX, '');
+        const filterKeyMapping: Record<string, string> = {
+          'created': SETTINGS_KEYS.DOCUMENTS_FILTER_DATE_RANGE,
+          'category': SETTINGS_KEYS.DOCUMENTS_FILTER_CATEGORY,
+          'correspondent': SETTINGS_KEYS.DOCUMENTS_FILTER_CORRESPONDENT,
+          'asn': SETTINGS_KEYS.DOCUMENTS_FILTER_ASN,
+          'owner': SETTINGS_KEYS.DOCUMENTS_FILTER_OWNER,
+        };
+        const mappedKey = filterKeyMapping[fieldId];
+        if (mappedKey) {
+          // Update global settings for built-in field filters
+          updateSetting(mappedKey, value);
+          // Also update filter_visibility in the custom view to trigger change detection
+          updateData.filter_visibility = {
+            ...currentView.filter_visibility,
+            [fieldId]: value,
+          };
+        }
+      } else if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_TYPE_PREFIX)) {
+        // Built-in field filter types could be stored globally or per custom view
+        // For now, store globally but still trigger view update for change detection
+        updateSetting(key, value);
+        // Trigger view update by ensuring updateData has at least one key
+        // Use filter_visibility with a modification marker to mark the view as changed
+        // We'll add a boolean flag that changes each time to ensure change detection
+        updateData.filter_visibility = {
+          ...currentView.filter_visibility,
+          _modified: !currentView.filter_visibility?._modified, // Toggle to ensure change detection
+        };
+      } else if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_TABLE_DISPLAY_TYPE_PREFIX)) {
+        // Built-in field table display type - store in column_display_types
+        const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_TABLE_DISPLAY_TYPE_PREFIX, '');
+        updateData.column_display_types = {
+          ...currentView.column_display_types,
+          [fieldId]: value,
+        };
+      } else if (key.startsWith(SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_PREFIX)) {
+        // Custom field edit mode - update global settings and trigger view update
+        const fieldId = key.replace(SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_PREFIX, '');
+        updateSetting(key, value);
+        // Trigger view update for change detection
+        // Use filter_visibility with a modification marker to mark the view as changed
+        // We'll add a boolean flag that changes each time to ensure change detection
+        updateData.filter_visibility = {
+          ...currentView.filter_visibility,
+          _modified: !currentView.filter_visibility?._modified, // Toggle to ensure change detection
+        };
+      } else if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_EDIT_MODE_PREFIX)) {
+        // Built-in field edit mode - update global settings and trigger view update
+        const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_EDIT_MODE_PREFIX, '');
+        updateSetting(key, value);
+        // Trigger view update for change detection
+        // Use filter_visibility with a modification marker to mark the view as changed
+        updateData.filter_visibility = {
+          ...currentView.filter_visibility,
+          _modified: !currentView.filter_visibility?._modified, // Toggle to ensure change detection
+        };
+      } else if (key.startsWith(SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX)) {
+        // Custom field edit mode entry type - update global settings and trigger view update
+        const fieldId = key.replace(SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX, '');
+        updateSetting(key, value);
+        // Trigger view update for change detection
+        // Use filter_visibility with a modification marker to mark the view as changed
+        updateData.filter_visibility = {
+          ...currentView.filter_visibility,
+          _modified: !currentView.filter_visibility?._modified, // Toggle to ensure change detection
+        };
+      } else if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX)) {
+        // Built-in field edit mode entry type - update global settings and trigger view update
+        const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX, '');
+        updateSetting(key, value);
+        // Trigger view update for change detection
+        // Use filter_visibility with a modification marker to mark the view as changed
+        updateData.filter_visibility = {
+          ...currentView.filter_visibility,
+          _modified: !currentView.filter_visibility?._modified, // Toggle to ensure change detection
+        };
+      } else if (key.startsWith(SETTINGS_KEYS.CUSTOM_FIELD_TAB_PREFIX)) {
+        // Custom field tab - update global settings and trigger view update
+        const fieldId = key.replace(SETTINGS_KEYS.CUSTOM_FIELD_TAB_PREFIX, '');
+        updateSetting(key, value);
+        // Trigger view update for change detection
+        // Use filter_visibility with a modification marker to mark the view as changed
+        updateData.filter_visibility = {
+          ...currentView.filter_visibility,
+          _modified: !currentView.filter_visibility?._modified, // Toggle to ensure change detection
+        };
+      } else if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_TAB_PREFIX)) {
+        // Built-in field tab - update global settings and trigger view update
+        const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_TAB_PREFIX, '');
+        updateSetting(key, value);
+        // Trigger view update for change detection
+        // Use filter_visibility with a modification marker to mark the view as changed
+        updateData.filter_visibility = {
+          ...currentView.filter_visibility,
+          _modified: !currentView.filter_visibility?._modified, // Toggle to ensure change detection
         };
       } else if (key === SETTINGS_KEYS.CUSTOM_FIELD_DISPLAY_ORDER) {
         // Update column_order with new custom field order
@@ -298,7 +561,11 @@ export function CustomFieldsTab({
           // Immediately update the ref so subsequent getSetting calls read the new value
           // This ensures immediate UI feedback (e.g., row reordering, display type updates)
           // Skip for column width changes to prevent remounting and losing input focus
-          updateRefImmediately(updateData);
+          // Only force remount for column order changes (which affect table structure)
+          // Other changes (visibility, display types, etc.) don't need remounting and will update naturally
+          const isColumnOrderChange = key === SETTINGS_KEYS.DOCUMENT_LIST_COLUMN_ORDER || 
+                                      key === SETTINGS_KEYS.CUSTOM_FIELD_DISPLAY_ORDER;
+          updateRefImmediately(updateData, isColumnOrderChange);
         } else {
           // For column width, just update the ref without incrementing counter
           // This allows the value to be read correctly without remounting
@@ -404,10 +671,9 @@ export function CustomFieldsTab({
     // For local drafts, just remove them - no API call needed
     if (typeof viewIdToDelete === 'string' && viewIdToDelete.startsWith('draft-')) {
       if (window.confirm(`Are you sure you want to delete draft view "${viewToDelete.name}"? This action cannot be undone.`)) {
-        onDeleteView(viewIdToDelete);
-        if (!view) {
-          onSelectView(null);
-        }
+        await onDeleteView(viewIdToDelete);
+        // Always return to list view after deletion
+        onSelectView(null);
       }
       return;
     }
@@ -416,9 +682,8 @@ export function CustomFieldsTab({
     if (window.confirm(`Are you sure you want to delete "${viewToDelete.name}"? This action cannot be undone.`)) {
       try {
         await onDeleteView(viewIdToDelete);
-        if (!view) {
-          onSelectView(null);
-        }
+        // Always return to list view after deletion
+        onSelectView(null);
       } catch (error) {
         // Error already handled in mutation
       }
