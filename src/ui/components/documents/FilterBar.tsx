@@ -12,7 +12,10 @@ import { SETTINGS_KEYS } from "@/app/data/ui-settings";
 import { getDefaultFilterType } from "@/ui/components/settings/customFieldHelpers";
 import { UiSettings } from "@/app/data/ui-settings";
 import { useCustomFieldValues } from "@/lib/api/hooks/use-custom-field-values";
+import { useBuiltinFilterValues } from "@/lib/api/hooks/use-builtin-filter-values";
 import { buildCustomFieldQueries, combineCustomFieldQueries } from './customFieldQueryBuilder';
+import { FilterRule } from "@/app/data/filter-rule";
+import { FILTER_CORRESPONDENT, FILTER_DOCUMENT_TYPE, FILTER_HAS_TAGS_ANY, FILTER_STORAGE_PATH, FILTER_OWNER_ANY, FILTER_ASN, FILTER_CREATED_AFTER, FILTER_CREATED_BEFORE, FILTER_IS_IN_INBOX, FILTER_CUSTOM_FIELDS_QUERY } from "@/app/data/filter-rule-type";
 
 interface FilterBarProps {
   searchQuery: string;
@@ -93,6 +96,135 @@ export const FilterBar = memo<FilterBarProps>(({
       .map(tag => ({ id: tag.id!, label: tag.name! })),
     [tags]
   );
+
+  // Helper function to convert filters to filter rules, excluding a specific filter type
+  const filtersToFilterRules = useCallback((excludeRuleType?: number): FilterRule[] => {
+    const rules: FilterRule[] = [];
+
+    // Correspondent filter
+    if (excludeRuleType !== FILTER_CORRESPONDENT && filters.correspondent.length > 0) {
+      filters.correspondent.forEach(id => {
+        rules.push({ rule_type: FILTER_CORRESPONDENT, value: id.toString() });
+      });
+    }
+
+    // Category/Document Type filter
+    if (excludeRuleType !== FILTER_DOCUMENT_TYPE && filters.category.length > 0) {
+      filters.category.forEach(id => {
+        rules.push({ rule_type: FILTER_DOCUMENT_TYPE, value: id.toString() });
+      });
+    }
+
+    // Tags filter
+    if (excludeRuleType !== FILTER_HAS_TAGS_ANY && filters.tags.length > 0) {
+      filters.tags.forEach(id => {
+        rules.push({ rule_type: FILTER_HAS_TAGS_ANY, value: id.toString() });
+      });
+    }
+
+    // Storage Path filter
+    if (excludeRuleType !== FILTER_STORAGE_PATH && filters.storagePath.length > 0) {
+      filters.storagePath.forEach(id => {
+        rules.push({ rule_type: FILTER_STORAGE_PATH, value: id.toString() });
+      });
+    }
+
+    // Owner filter
+    if (excludeRuleType !== FILTER_OWNER_ANY && filters.owner.length > 0) {
+      filters.owner.forEach(id => {
+        rules.push({ rule_type: FILTER_OWNER_ANY, value: id.toString() });
+      });
+    }
+
+    // ASN filter
+    if (excludeRuleType !== FILTER_ASN && filters.asn.length > 0) {
+      filters.asn.forEach(id => {
+        rules.push({ rule_type: FILTER_ASN, value: id.toString() });
+      });
+    }
+
+    // Date Range filter
+    if (filters.dateRange) {
+      if (filters.dateRange.start) {
+        rules.push({ rule_type: FILTER_CREATED_AFTER, value: filters.dateRange.start.toISOString().split('T')[0] });
+      }
+      if (filters.dateRange.end) {
+        rules.push({ rule_type: FILTER_CREATED_BEFORE, value: filters.dateRange.end.toISOString().split('T')[0] });
+      }
+    }
+
+    // Status filter
+    if (filters.status.length > 0 && filters.status.includes('active') && !filters.status.includes('archived')) {
+      rules.push({ rule_type: FILTER_IS_IN_INBOX, value: '1' });
+    }
+
+    // Custom field filters
+    const customFieldQueries = buildCustomFieldQueries(filters.customFields);
+    const combinedQuery = combineCustomFieldQueries(customFieldQueries);
+    if (combinedQuery) {
+      const queryString = JSON.stringify(combinedQuery);
+      rules.push({ rule_type: FILTER_CUSTOM_FIELDS_QUERY, value: queryString });
+    }
+
+    return rules;
+  }, [filters]);
+
+  // Get context-aware filter values for correspondents
+  const correspondentFilterRules = useMemo(() => filtersToFilterRules(FILTER_CORRESPONDENT), [filtersToFilterRules]);
+  const { values: correspondentValuesFromAPI } = useBuiltinFilterValues(
+    filterVisibility.correspondent ? 'correspondent' : null,
+    correspondentFilterRules.length > 0 ? correspondentFilterRules : undefined
+  );
+
+  // Merge API values with static options, prioritizing API values (they have counts and are context-aware)
+  const correspondentOptionsWithCounts = useMemo(() => {
+    if (correspondentValuesFromAPI.length > 0) {
+      // Use API values (they have counts and are context-aware)
+      return correspondentValuesFromAPI.map(val => ({
+        id: val.id,
+        label: val.label,
+        count: val.count,
+      }));
+    }
+    // Fallback to static options (no counts, not context-aware)
+    return correspondentOptions.map(opt => ({ ...opt, count: undefined }));
+  }, [correspondentValuesFromAPI, correspondentOptions]);
+
+  // Get context-aware filter values for document types
+  const documentTypeFilterRules = useMemo(() => filtersToFilterRules(FILTER_DOCUMENT_TYPE), [filtersToFilterRules]);
+  const { values: documentTypeValuesFromAPI } = useBuiltinFilterValues(
+    filterVisibility.category ? 'document_type' : null,
+    documentTypeFilterRules.length > 0 ? documentTypeFilterRules : undefined
+  );
+
+  const categoryOptionsWithCounts = useMemo(() => {
+    if (documentTypeValuesFromAPI.length > 0) {
+      return documentTypeValuesFromAPI.map(val => ({
+        id: val.id,
+        label: val.label,
+        count: val.count,
+      }));
+    }
+    return categoryOptions.map(opt => ({ ...opt, count: undefined }));
+  }, [documentTypeValuesFromAPI, categoryOptions]);
+
+  // Get context-aware filter values for tags
+  const tagFilterRules = useMemo(() => filtersToFilterRules(FILTER_HAS_TAGS_ANY), [filtersToFilterRules]);
+  const { values: tagValuesFromAPI } = useBuiltinFilterValues(
+    filterVisibility.tags ? 'tag' : null,
+    tagFilterRules.length > 0 ? tagFilterRules : undefined
+  );
+
+  const tagOptionsWithCounts = useMemo(() => {
+    if (tagValuesFromAPI.length > 0) {
+      return tagValuesFromAPI.map(val => ({
+        id: val.id,
+        label: val.label,
+        count: val.count,
+      }));
+    }
+    return tagOptions.map(opt => ({ ...opt, count: undefined }));
+  }, [tagValuesFromAPI, tagOptions]);
 
   // Check if any filters are active
   const hasActiveFilters = useMemo(() => {
@@ -266,7 +398,7 @@ export const FilterBar = memo<FilterBarProps>(({
         <FilterDropDown
           label="Document type"
           icon={<FeatherTag />}
-          options={categoryOptions}
+          options={categoryOptionsWithCounts}
           selectedIds={filters.category}
           onSelectionChange={(ids) => updateFilter.category(ids as number[])}
           multiSelect={true}
@@ -278,7 +410,7 @@ export const FilterBar = memo<FilterBarProps>(({
         <FilterDropDown
           label="Correspondent"
           icon={<FeatherUser />}
-          options={correspondentOptions}
+          options={correspondentOptionsWithCounts}
           selectedIds={filters.correspondent}
           onSelectionChange={(ids) => updateFilter.correspondent(ids as number[])}
           multiSelect={true}
@@ -290,7 +422,7 @@ export const FilterBar = memo<FilterBarProps>(({
         <FilterDropDown
           label="Tags"
           icon={<FeatherTag />}
-          options={tagOptions}
+          options={tagOptionsWithCounts}
           selectedIds={filters.tags}
           onSelectionChange={(ids) => updateFilter.tags(ids as number[])}
           multiSelect={true}
