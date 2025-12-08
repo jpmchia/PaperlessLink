@@ -13,10 +13,6 @@ interface CustomFieldsTableProps {
   customFields: CustomField[];
   getSetting: (key: string, defaultValue: any) => any;
   updateSetting: (key: string, value: any) => void;
-  tabsList: string[];
-  newTabInput: Record<number, string>;
-  setNewTabInput: React.Dispatch<React.SetStateAction<Record<number, string>>>;
-  handleAddTab: (fieldId: number, tabName: string) => void;
   customViewId?: number | string | null; // ID of the custom view being edited (number for saved, string for drafts)
 }
 
@@ -24,10 +20,6 @@ export function CustomFieldsTable({
   customFields,
   getSetting,
   updateSetting,
-  tabsList,
-  newTabInput,
-  setNewTabInput,
-  handleAddTab,
 }: CustomFieldsTableProps) {
   const [draggedFieldId, setDraggedFieldId] = useState<string | number | null>(null);
 
@@ -35,11 +27,11 @@ export function CustomFieldsTable({
   // Memoize based on stringified values to prevent re-renders when arrays are recreated with same content
   const columnOrderValue = getSetting(SETTINGS_KEYS.DOCUMENT_LIST_COLUMN_ORDER, [] as (string | number)[]);
   const customFieldOrderValue = getSetting(SETTINGS_KEYS.CUSTOM_FIELD_DISPLAY_ORDER, [] as number[]);
-  
+
   // Use stringified values as keys for memoization to ensure stability
   const columnOrderStr = JSON.stringify(columnOrderValue);
   const customFieldOrderStr = JSON.stringify(customFieldOrderValue);
-  
+
   const columnOrder = useMemo(() => {
     try {
       return JSON.parse(columnOrderStr) as (string | number)[];
@@ -47,7 +39,7 @@ export function CustomFieldsTable({
       return [] as (string | number)[];
     }
   }, [columnOrderStr]);
-  
+
   const customFieldOrder = useMemo(() => {
     try {
       return JSON.parse(customFieldOrderStr) as number[];
@@ -78,14 +70,29 @@ export function CustomFieldsTable({
 
     // Add fields in order
     order.forEach((id: string | number) => {
+      // Handle customField_ prefixed strings for custom field lookup
+      let customFieldId: number | null = null;
+      if (typeof id === 'string' && id.startsWith('customField_')) {
+        const numId = parseInt(id.replace('customField_', ''), 10);
+        if (!isNaN(numId)) {
+          customFieldId = numId;
+        }
+      } else if (typeof id === 'number') {
+        customFieldId = id;
+      }
+
       const builtInField = builtInMap.get(id as string);
-      const customField = customFieldMap.get(id as number);
+      const customField = customFieldId !== null ? customFieldMap.get(customFieldId) : undefined;
+
       if (builtInField) {
         orderedFields.push(builtInField);
         processedIds.add(id);
       } else if (customField) {
         orderedFields.push(customField);
+        // Track the original ID format used in the order
         processedIds.add(id);
+        // Also track the numeric ID to prevent duplicates
+        if (customFieldId !== null) processedIds.add(customFieldId);
       }
     });
 
@@ -215,7 +222,6 @@ export function CustomFieldsTable({
             <Table.HeaderCell>Column Width</Table.HeaderCell>
             <Table.HeaderCell>Show in Edit Mode</Table.HeaderCell>
             <Table.HeaderCell>Edit Mode Entry Type</Table.HeaderCell>
-            <Table.HeaderCell>Tab</Table.HeaderCell>
           </Table.HeaderRow>
         }
       >
@@ -225,10 +231,6 @@ export function CustomFieldsTable({
             field={field}
             getSetting={getSetting}
             updateSetting={updateSetting}
-            tabsList={tabsList}
-            newTabInput={newTabInput}
-            setNewTabInput={setNewTabInput}
-            handleAddTab={handleAddTab}
             draggedFieldId={draggedFieldId}
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}

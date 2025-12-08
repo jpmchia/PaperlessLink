@@ -4,7 +4,7 @@ import { DateRangePicker } from "@/ui/components/DateRangePicker";
 import { FilterDropDown } from "@/ui/components/FilterDropDown";
 import { Button } from "@/ui/components/Button";
 import { IconButton } from "@/ui/components/IconButton";
-import { FeatherSearch, FeatherTag, FeatherUser, FeatherFolder, FeatherUsers, FeatherListFilter, FeatherHash, FeatherChevronRight, FeatherChevronLeft, FeatherDownload, FeatherPlus, FeatherX } from "@subframe/core";
+import { FeatherSearch, FeatherTag, FeatherUser, FeatherFolder, FeatherUsers, FeatherListFilter, FeatherHash, FeatherChevronRight, FeatherChevronLeft, FeatherDownload, FeatherPlus, FeatherX, FeatherCalendar } from "@subframe/core";
 import { useDocumentFilters, FilterVisibility } from './useDocumentFilters';
 import { CustomField } from "@/app/data/custom-field";
 import { CustomView } from "@/app/data/custom-view";
@@ -20,7 +20,7 @@ import { FILTER_CORRESPONDENT, FILTER_DOCUMENT_TYPE, FILTER_HAS_TAGS_ANY, FILTER
 interface FilterBarProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
-  filterVisibility: FilterVisibility;
+  filterVisibility: FilterVisibility & Record<string, boolean>;
   filters: {
     dateRange: { start: Date | null; end: Date | null } | null;
     category: number[];
@@ -34,6 +34,8 @@ interface FilterBarProps {
       type: string;
       value: any;
     }>;
+    // Dynamic filters for built-in fields (date ranges by field id)
+    builtInDateRanges?: Record<string, { start: Date | null; end: Date | null } | null>;
   };
   updateFilter: {
     dateRange: (value: { start: Date | null; end: Date | null } | null) => void;
@@ -45,6 +47,7 @@ interface FilterBarProps {
     status: (value: string[]) => void;
     asn: (value: number[]) => void;
     customField: (fieldId: number, filterType: string, value: any) => void;
+    builtInField?: (fieldId: string, filterType: string, value: any) => void;
   };
   documentTypes: Array<{ id?: number; name?: string }>;
   correspondents: Array<{ id?: number; name?: string }>;
@@ -53,6 +56,9 @@ interface FilterBarProps {
   appliedCustomView?: CustomView | null;
   settings?: UiSettings | null;
   pendingFilterVisibility?: Record<string, boolean> | null;
+  // New props for dynamic rendering
+  columnOrder?: string[];
+  filterTypes?: Record<string, string>;
   onAddDocument: () => void;
   filterBarRef?: React.RefObject<HTMLDivElement>;
   totalCount?: number;
@@ -71,6 +77,8 @@ export const FilterBar = memo<FilterBarProps>(({
   appliedCustomView,
   settings,
   pendingFilterVisibility,
+  columnOrder = [],
+  filterTypes = {},
   onAddDocument,
   filterBarRef,
   totalCount,
@@ -295,8 +303,8 @@ export const FilterBar = memo<FilterBarProps>(({
     if (Object.keys(filters.customFields || {}).length > 0) {
       // Check if any custom field has a value
       return Object.values(filters.customFields || {}).some(
-        field => field.value !== null && field.value !== undefined && 
-        (Array.isArray(field.value) ? field.value.length > 0 : true)
+        field => field.value !== null && field.value !== undefined &&
+          (Array.isArray(field.value) ? field.value.length > 0 : true)
       );
     }
     return false;
@@ -322,11 +330,11 @@ export const FilterBar = memo<FilterBarProps>(({
   // Generate human-readable filter summary
   const filterSummary = useMemo(() => {
     const parts: string[] = [];
-    
+
     if (searchQuery.trim()) {
       parts.push(`search: "${searchQuery}"`);
     }
-    
+
     if (filters.dateRange?.start || filters.dateRange?.end) {
       const start = filters.dateRange.start?.toLocaleDateString() || '';
       const end = filters.dateRange.end?.toLocaleDateString() || '';
@@ -338,7 +346,7 @@ export const FilterBar = memo<FilterBarProps>(({
         parts.push(`Created Date: until ${end}`);
       }
     }
-    
+
     if (filters.category.length > 0) {
       const names = filters.category
         .map(id => categoryOptions.find(opt => opt.id === id)?.label)
@@ -346,7 +354,7 @@ export const FilterBar = memo<FilterBarProps>(({
         .join(', ');
       if (names) parts.push(`Document type: ${names}`);
     }
-    
+
     if (filters.correspondent.length > 0) {
       const names = filters.correspondent
         .map(id => correspondentOptions.find(opt => opt.id === id)?.label)
@@ -354,7 +362,7 @@ export const FilterBar = memo<FilterBarProps>(({
         .join(', ');
       if (names) parts.push(`Correspondent: ${names}`);
     }
-    
+
     if (filters.tags.length > 0) {
       const names = filters.tags
         .map(id => tagOptions.find(opt => opt.id === id)?.label)
@@ -362,34 +370,34 @@ export const FilterBar = memo<FilterBarProps>(({
         .join(', ');
       if (names) parts.push(`Tags: ${names}`);
     }
-    
+
     if (filters.storagePath.length > 0) {
       parts.push(`Storage Path: ${filters.storagePath.length} selected`);
     }
-    
+
     if (filters.owner.length > 0) {
       parts.push(`Owner: ${filters.owner.join(', ')}`);
     }
-    
+
     if (filters.status.length > 0) {
       parts.push(`Status: ${filters.status.join(', ')}`);
     }
-    
+
     if (filters.asn.length > 0) {
       parts.push(`ASN: ${filters.asn.join(', ')}`);
     }
-    
+
     // Custom field filters
     Object.entries(filters.customFields || {}).forEach(([fieldIdStr, fieldFilter]) => {
       if (!fieldFilter.value) return;
-      
+
       const fieldId = parseInt(fieldIdStr);
       const field = customFields.find(f => f.id === fieldId);
       if (!field) return;
-      
+
       const filterType = fieldFilter.type;
       let valueText = '';
-      
+
       if (filterType === 'date-range' && fieldFilter.value) {
         const range = fieldFilter.value as { start?: Date | null; end?: Date | null };
         const start = range.start?.toLocaleDateString() || '';
@@ -413,15 +421,15 @@ export const FilterBar = memo<FilterBarProps>(({
         });
         valueText = labels.join(', ');
       }
-      
+
       if (valueText) {
         parts.push(`${field.name}: ${valueText}`);
       }
     });
-    
+
     const summaryText = parts.length > 0 ? parts.join(' • ') : 'No filters applied';
     const countText = totalCount !== undefined ? ` •  ${totalCount.toLocaleString()} ${totalCount === 1 ? 'result' : 'results'}` : '';
-    
+
     return summaryText + countText;
   }, [searchQuery, filters, categoryOptions, correspondentOptions, tagOptions, customFields, totalCount]);
 
@@ -442,124 +450,213 @@ export const FilterBar = memo<FilterBarProps>(({
           }}
         />
       </TextField>
-      {filterVisibility.dateRange && (
-        <DateRangePicker
-          label="Created Date"
-          value={filters.dateRange || undefined}
-          onChange={(range) => updateFilter.dateRange(range.start || range.end ? range : null)}
-        />
-      )}
-      {filterVisibility.category && (
-        <FilterDropDown
-          label="Document type"
-          icon={<FeatherTag />}
-          options={categoryOptionsWithCounts}
-          selectedIds={filters.category}
-          onSelectionChange={(ids) => updateFilter.category(ids as number[])}
-          multiSelect={true}
-          showAllOption={true}
-          allOptionLabel="All Document types"
-        />
-      )}
-      {filterVisibility.correspondent && (
-        <FilterDropDown
-          label="Correspondent"
-          icon={<FeatherUser />}
-          options={correspondentOptionsWithCounts}
-          selectedIds={filters.correspondent}
-          onSelectionChange={(ids) => updateFilter.correspondent(ids as number[])}
-          multiSelect={true}
-          showAllOption={true}
-          allOptionLabel="All Correspondents"
-        />
-      )}
-      {filterVisibility.tags && (
-        <FilterDropDown
-          label="Tags"
-          icon={<FeatherTag />}
-          options={tagOptionsWithCounts}
-          selectedIds={filters.tags}
-          onSelectionChange={(ids) => updateFilter.tags(ids as number[])}
-          multiSelect={true}
-        />
-      )}
-      {filterVisibility.storagePath && (
-        <FilterDropDown
-          label="Storage Path"
-          icon={<FeatherFolder />}
-          options={storagePathOptionsWithCounts}
-          selectedIds={filters.storagePath}
-          onSelectionChange={(ids) => updateFilter.storagePath(ids as number[])}
-          multiSelect={true}
-          showAllOption={true}
-          allOptionLabel="All Storage Paths"
-        />
-      )}
-      {filterVisibility.owner && (
-        <FilterDropDown
-          label="Owner"
-          icon={<FeatherUsers />}
-          options={ownerOptionsWithCounts}
-          selectedIds={filters.owner}
-          onSelectionChange={(ids) => updateFilter.owner(ids as string[])}
-          multiSelect={true}
-          showAllOption={true}
-          allOptionLabel="All Owners"
-        />
-      )}
-      {filterVisibility.asn && (
-        <FilterDropDown
-          label="ASN"
-          icon={<FeatherHash />}
-          options={asnOptionsWithCounts}
-          selectedIds={filters.asn}
-          onSelectionChange={(ids) => updateFilter.asn(ids as number[])}
-          multiSelect={true}
-          showAllOption={true}
-          allOptionLabel="All ASN"
-        />
-      )}
-      
+      {/* Dynamic Filter Rendering - uses columnOrder if available, otherwise falls back to built-in order */}
+      {(() => {
+        // Define built-in filter configurations
+        const builtInFilterConfigs: Record<string, {
+          label: string;
+          icon: React.ReactNode;
+          options: any[];
+          selectedIds: any;
+          onSelectionChange: (ids: any[]) => void;
+          visibilityKey: keyof FilterVisibility;
+          isDateRange?: boolean;
+          defaultFilterType?: string;
+        }> = {
+          'created': {
+            label: 'Created Date',
+            icon: <FeatherCalendar />,
+            options: [],
+            selectedIds: filters.dateRange,
+            onSelectionChange: () => { },
+            visibilityKey: 'dateRange',
+            isDateRange: true,
+            defaultFilterType: 'date-range',
+          },
+          'added': {
+            label: 'Added Date',
+            icon: <FeatherCalendar />,
+            options: [],
+            selectedIds: null, // TODO: separate added date filter
+            onSelectionChange: () => { },
+            visibilityKey: 'dateRange',
+            isDateRange: true,
+            defaultFilterType: 'date-range',
+          },
+          'category': {
+            label: 'Document type',
+            icon: <FeatherTag />,
+            options: categoryOptionsWithCounts,
+            selectedIds: filters.category,
+            onSelectionChange: (ids) => updateFilter.category(ids as number[]),
+            visibilityKey: 'category',
+            defaultFilterType: 'multi-select',
+          },
+          'correspondent': {
+            label: 'Correspondent',
+            icon: <FeatherUser />,
+            options: correspondentOptionsWithCounts,
+            selectedIds: filters.correspondent,
+            onSelectionChange: (ids) => updateFilter.correspondent(ids as number[]),
+            visibilityKey: 'correspondent',
+            defaultFilterType: 'multi-select',
+          },
+          'tags': {
+            label: 'Tags',
+            icon: <FeatherTag />,
+            options: tagOptionsWithCounts,
+            selectedIds: filters.tags,
+            onSelectionChange: (ids) => updateFilter.tags(ids as number[]),
+            visibilityKey: 'tags',
+            defaultFilterType: 'multi-select',
+          },
+          'storagePath': {
+            label: 'Storage Path',
+            icon: <FeatherFolder />,
+            options: storagePathOptionsWithCounts,
+            selectedIds: filters.storagePath,
+            onSelectionChange: (ids) => updateFilter.storagePath(ids as number[]),
+            visibilityKey: 'storagePath',
+            defaultFilterType: 'multi-select',
+          },
+          'storage_path': {
+            label: 'Storage Path',
+            icon: <FeatherFolder />,
+            options: storagePathOptionsWithCounts,
+            selectedIds: filters.storagePath,
+            onSelectionChange: (ids) => updateFilter.storagePath(ids as number[]),
+            visibilityKey: 'storagePath',
+            defaultFilterType: 'multi-select',
+          },
+          'owner': {
+            label: 'Owner',
+            icon: <FeatherUsers />,
+            options: ownerOptionsWithCounts,
+            selectedIds: filters.owner,
+            onSelectionChange: (ids) => updateFilter.owner(ids as string[]),
+            visibilityKey: 'owner',
+            defaultFilterType: 'multi-select',
+          },
+          'asn': {
+            label: 'ASN',
+            icon: <FeatherHash />,
+            options: asnOptionsWithCounts,
+            selectedIds: filters.asn,
+            onSelectionChange: (ids) => updateFilter.asn(ids as number[]),
+            visibilityKey: 'asn',
+            defaultFilterType: 'multi-select',
+          },
+        };
+
+        // Default order for built-in filters when no columnOrder provided
+        const defaultBuiltInOrder = ['created', 'category', 'correspondent', 'tags', 'storagePath', 'owner', 'asn'];
+
+        // Use columnOrder if available, otherwise use default order
+        const effectiveOrder = columnOrder && columnOrder.length > 0
+          ? columnOrder
+          : defaultBuiltInOrder;
+
+        return effectiveOrder.map((fieldId) => {
+          // Check if this is a custom field (starts with customField_ or is a number)
+          const isCustomField = typeof fieldId === 'string' &&
+            (fieldId.startsWith('customField_') || /^\d+$/.test(fieldId));
+
+          if (isCustomField) {
+            // Custom fields are rendered separately below
+            return null;
+          }
+
+          // Check if this is a built-in field with a filter config
+          const config = builtInFilterConfigs[fieldId as string];
+          if (!config) return null;
+
+          // Check filter visibility - prioritize field-specific visibility (from view settings)
+          // Only fall back to legacy visibilityKey if fieldId is not explicitly defined
+          const filterVisibilityRecord = filterVisibility as Record<string, boolean>;
+          const isVisibleByFieldId = filterVisibilityRecord[fieldId];
+          const isVisibleByKey = filterVisibility[config.visibilityKey];
+          // Use fieldId if explicitly set, otherwise fall back to legacy key
+          const isVisible = isVisibleByFieldId !== undefined ? isVisibleByFieldId : isVisibleByKey;
+
+          if (!isVisible) return null;
+
+          // Get filter type from filterTypes prop or use default
+          const filterType = filterTypes?.[fieldId] || config.defaultFilterType || 'multi-select';
+
+          // Render based on filter type
+          if (filterType === 'date-range' && config.isDateRange) {
+            return (
+              <DateRangePicker
+                key={`filter-${fieldId}`}
+                label={config.label}
+                value={filters.dateRange || undefined}
+                onChange={(range) => updateFilter.dateRange(range.start || range.end ? range : null)}
+              />
+            );
+          } else {
+            // Default to dropdown/multi-select
+            return (
+              <FilterDropDown
+                key={`filter-${fieldId}`}
+                label={config.label}
+                icon={config.icon}
+                options={config.options}
+                selectedIds={config.selectedIds}
+                onSelectionChange={config.onSelectionChange}
+                multiSelect={true}
+                showAllOption={true}
+                allOptionLabel={`All ${config.label}`}
+              />
+            );
+          }
+        }).filter(Boolean);
+      })()}
+
       {/* Vertical Separator */}
       {appliedCustomView && customFields.length > 0 && (
         <div className="h-6 w-px bg-neutral-border" />
       )}
-      
+
       {/* Dynamic Custom Field Filters */}
       {appliedCustomView && customFields.map((field) => {
         if (!field.id) return null;
-        
+
         // Check if this field should be shown as a filter
         // Try multiple key formats to match how it might be stored
         const filterKey = `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_PREFIX}${field.id}`;
         const filterVisibilityKey1 = `customField_${field.id}`;
         const filterVisibilityKey2 = String(field.id);
-        
+
         // Check filter_visibility object first (use pending if available), then fall back to settings
         const currentFilterVisibility = pendingFilterVisibility ?? appliedCustomView.filter_visibility ?? {};
         const isFilterVisibleFromView = currentFilterVisibility[filterKey] ||
-                                       currentFilterVisibility[filterVisibilityKey1] ||
-                                       currentFilterVisibility[filterVisibilityKey2] ||
-                                       false;
-        
+          currentFilterVisibility[filterVisibilityKey1] ||
+          currentFilterVisibility[filterVisibilityKey2] ||
+          false;
+
         // Also check global settings as fallback
         const settingsObj = settings?.settings as Record<string, any> | undefined;
         const isFilterVisibleFromSettings = settingsObj?.[filterKey] || false;
-        
-        const isFilterVisible = isFilterVisibleFromView || isFilterVisibleFromSettings;
-        
+
+        // When a view is active, use view settings exclusively. Only use global settings if no view is active.
+        const isFilterVisible = appliedCustomView
+          ? isFilterVisibleFromView
+          : isFilterVisibleFromSettings;
+
         if (!isFilterVisible) return null;
-        
-        // Get filter type from settings
+
+        // Get filter type from view's filter_types first, then fall back to global settings
         const filterTypeKey = `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_TYPE_PREFIX}${field.id}`;
-        const filterType = settingsObj?.[filterTypeKey] || getDefaultFilterType(field.data_type);
-        
+        const filterTypeFromView = appliedCustomView?.filter_types?.[`customField_${field.id}`] ||
+          appliedCustomView?.filter_types?.[String(field.id)];
+        const filterType = filterTypeFromView || settingsObj?.[filterTypeKey] || getDefaultFilterType(field.data_type);
+
         if (!field.id) return null; // Double check field.id exists
-        
+
         // Get current filter value
         const currentFilter = filters.customFields?.[field.id];
         const currentFilterValue = currentFilter?.value;
-        
+
         // Render filter based on type
         if (filterType === 'date-range') {
           return (
@@ -618,12 +715,12 @@ export const FilterBar = memo<FilterBarProps>(({
           return null;
         }
       })}
-      
+
       {/* Vertical Separator after custom field filters */}
       {appliedCustomView && customFields.length > 0 && (
         <div className="h-6 w-px bg-neutral-border" />
       )}
-      
+
       {/* Clear all filters button */}
       {hasActiveFilters && (
         <Button
@@ -635,19 +732,19 @@ export const FilterBar = memo<FilterBarProps>(({
           Clear all filters
         </Button>
       )}
-      
+
       {/* Vertical Separator after clear button */}
       {hasActiveFilters && (
         <div className="h-6 w-px bg-neutral-border" />
       )}
-      
+
       {/* Filter summary text */}
       {hasActiveFilters && (
         <span className="text-body text-neutral-500 text-xs">
           {filterSummary}
         </span>
       )}
-      
+
       {/* <div className="flex grow shrink-0 basis-0 items-center justify-end gap-2">
         <Button
           variant="brand-primary"
@@ -684,45 +781,45 @@ function CustomFieldSelectFilter({
   // Convert filters to filter rules, excluding the current field
   const filterRules = useMemo(() => {
     if (!allFilters) return undefined;
-    
+
     // Import filter rule conversion logic
     const rules: any[] = [];
-    
+
     // Correspondent filter
     if (allFilters.correspondent.length > 0) {
       allFilters.correspondent.forEach(id => {
         rules.push({ rule_type: 1, value: id.toString() }); // FILTER_CORRESPONDENT = 1
       });
     }
-    
+
     // Category/Document Type filter
     if (allFilters.category.length > 0) {
       allFilters.category.forEach(id => {
         rules.push({ rule_type: 2, value: id.toString() }); // FILTER_DOCUMENT_TYPE = 2
       });
     }
-    
+
     // Tags filter
     if (allFilters.tags.length > 0) {
       allFilters.tags.forEach(id => {
         rules.push({ rule_type: 3, value: id.toString() }); // FILTER_HAS_TAGS_ANY = 3
       });
     }
-    
+
     // Storage Path filter
     if (allFilters.storagePath.length > 0) {
       allFilters.storagePath.forEach(id => {
         rules.push({ rule_type: 4, value: id.toString() }); // FILTER_STORAGE_PATH = 4
       });
     }
-    
+
     // Owner filter
     if (allFilters.owner.length > 0) {
       allFilters.owner.forEach(username => {
         rules.push({ rule_type: 5, value: username }); // FILTER_OWNER_ANY = 5
       });
     }
-    
+
     // Date Range filter
     if (allFilters.dateRange) {
       if (allFilters.dateRange.start) {
@@ -732,28 +829,28 @@ function CustomFieldSelectFilter({
         rules.push({ rule_type: 7, value: allFilters.dateRange.end.toISOString().split('T')[0] }); // FILTER_CREATED_BEFORE = 7
       }
     }
-    
+
     // ASN filter
     if (allFilters.asn.length > 0) {
       allFilters.asn.forEach(id => {
         rules.push({ rule_type: 8, value: id.toString() }); // FILTER_ASN = 8
       });
     }
-    
+
     // Status filter
     if (allFilters.status.length > 0 && allFilters.status.includes('active') && !allFilters.status.includes('archived')) {
       rules.push({ rule_type: 9, value: '1' }); // FILTER_IS_IN_INBOX = 9
     }
-    
+
     // Custom field filters - exclude the current field, use shared utility function
     const customFieldQueries = buildCustomFieldQueries(allFilters.customFields, fieldId);
     const combinedQuery = combineCustomFieldQueries(customFieldQueries);
-    
+
     if (combinedQuery) {
       const queryString = JSON.stringify(combinedQuery);
       rules.push({ rule_type: 42, value: queryString }); // FILTER_CUSTOM_FIELDS_QUERY = 42
     }
-    
+
     // Debug logging
     if (rules.length > 0) {
       console.log(`[CustomFieldSelectFilter] Field ${fieldId} (${fieldName}): Building filter rules:`, {
@@ -764,17 +861,17 @@ function CustomFieldSelectFilter({
         rules,
       });
     }
-    
+
     return rules.length > 0 ? rules : undefined;
   }, [allFilters, fieldId, fieldName]);
-  
+
   const { values, loading } = useCustomFieldValues(fieldId, filterRules);
-  
+
   // Create maps for lookup: ID -> label and label -> ID (for backwards compatibility)
   const selectOptionMap = useMemo(() => {
     const idToLabelMap = new Map<string, string>();
     const labelToIdMap = new Map<string, string>();
-    
+
     if (selectOptions && Array.isArray(selectOptions)) {
       selectOptions
         .filter(opt => opt != null && opt !== undefined) // Filter out null/undefined
@@ -787,17 +884,17 @@ function CustomFieldSelectFilter({
           }
         });
     }
-    
+
     return { idToLabel: idToLabelMap, labelToId: labelToIdMap };
   }, [selectOptions]);
-  
+
   // Convert API values to FilterOption format
   // API returns select option IDs as labels, so we need to map them to actual labels
   const fieldOptions = useMemo(() => {
     if (!values || values.length === 0) {
       return [];
     }
-    
+
     const options = values.map((val) => {
       // Special handling for blank option - use the ID directly
       if (val.id === '__blank__') {
@@ -807,15 +904,15 @@ function CustomFieldSelectFilter({
           count: val.count,
         };
       }
-      
+
       // The API's "label" field actually contains the select option ID (or sometimes the old label value)
       // The API's "id" field is an internal value ID (like "val-4235291381520459507")
       const selectOptionIdOrLabel = String(val.label || val.id);
-      
+
       // First, try to find by ID (new format - API returns select option ID in label field)
       let actualLabel = selectOptionMap.idToLabel.get(selectOptionIdOrLabel);
       let actualId = selectOptionIdOrLabel;
-      
+
       // If not found by ID, try to find by label (API might return actual label value)
       if (!actualLabel) {
         const foundId = selectOptionMap.labelToId.get(selectOptionIdOrLabel.toLowerCase());
@@ -826,14 +923,14 @@ function CustomFieldSelectFilter({
           // Still not found - might be an old value or missing option
           // Only log warning if we have select options defined (to avoid noise for dynamic fields)
           if (selectOptionMap.idToLabel.size > 0) {
-            console.warn(`[CustomFieldSelectFilter] Field "${fieldName}" (${fieldId}): Could not find label for value "${selectOptionIdOrLabel}". Available options:`, 
+            console.warn(`[CustomFieldSelectFilter] Field "${fieldName}" (${fieldId}): Could not find label for value "${selectOptionIdOrLabel}". Available options:`,
               Array.from(selectOptionMap.idToLabel.entries()).map(([id, label]) => `${id} -> ${label}`)
             );
           }
           actualLabel = selectOptionIdOrLabel; // Use the value itself as the label
         }
       }
-      
+
       // Use the select option ID as the filter ID (this is what's stored in filters)
       // This matches what's in the custom field's select_options
       return {
@@ -842,10 +939,10 @@ function CustomFieldSelectFilter({
         count: val.count,
       };
     });
-    
+
     return options;
   }, [values, selectOptionMap, fieldName, fieldId]);
-  
+
   // Normalize selected IDs to strings to match the options
   const selectedIds = useMemo(() => {
     if (!currentFilterValue) {
@@ -856,7 +953,7 @@ function CustomFieldSelectFilter({
     }
     return [String(currentFilterValue)];
   }, [currentFilterValue]);
-  
+
   // Debug: Log when values don't match and show what's being displayed
   React.useEffect(() => {
     if (selectedIds.length > 0 && !loading) {
@@ -865,10 +962,10 @@ function CustomFieldSelectFilter({
           const opt = fieldOptions.find(opt => String(opt.id) === String(id));
           return { id, option: opt };
         });
-      
+
       const unmatchedIds = matchedOptions.filter(m => !m.option).map(m => m.id);
       const matched = matchedOptions.filter(m => m.option);
-      
+
       console.log(`[CustomFieldSelectFilter] Field "${fieldName}" (${fieldId}):`, {
         selectedIds,
         matched: matched.map(m => ({ id: m.id, label: m.option!.label })),
@@ -877,20 +974,20 @@ function CustomFieldSelectFilter({
         currentFilterValue,
         valuesFromAPI: values,
       });
-      
+
       if (unmatchedIds.length > 0) {
         console.warn(`[CustomFieldSelectFilter] Field "${fieldName}" (${fieldId}): Selected IDs not found in options:`, unmatchedIds);
       }
     }
   }, [selectedIds, fieldOptions, loading, fieldName, fieldId, currentFilterValue, values]);
-  
+
   // Handle selection change - convert back to original format if needed
   const handleSelectionChange = useCallback((ids: (string | number)[]) => {
     // Convert string IDs back to the format expected by the filter
     // Keep as strings since API uses strings
     onSelectionChange(ids.map(id => String(id)));
   }, [onSelectionChange]);
-  
+
   return (
     <FilterDropDown
       label={fieldName}

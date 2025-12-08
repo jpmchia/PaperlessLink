@@ -13,4 +13,6 @@ export { useAuth } from './use-auth'
 export { useRemoteUserAuth } from './use-remote-user-auth'
 export { useSettings } from './use-settings'
 export { useCustomViews, useCustomView } from './use-custom-views'
+export { useTagGroups, useTagGroup } from './use-tag-groups'
+export { useTagDescription, useTagDescriptions } from './use-tag-descriptions'
 

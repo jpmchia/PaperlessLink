@@ -41,7 +41,7 @@ export function validateAndSanitizeCustomView(
   )
 
   // Validate and sanitize column_order
-  const sanitizedColumnOrder: (string | number)[] = []
+  const sanitizedColumnOrder: string[] = []
   view.column_order?.forEach((columnId) => {
     if (typeof columnId === 'string') {
       // Built-in field or custom field column ID string
@@ -60,9 +60,9 @@ export function validateAndSanitizeCustomView(
         sanitizedColumnOrder.push(columnId)
       }
     } else if (typeof columnId === 'number') {
-      // Custom field ID (numeric)
+      // Legacy Custom field ID (numeric) - convert to string format
       if (availableCustomFieldIds.has(columnId)) {
-        sanitizedColumnOrder.push(columnId)
+        sanitizedColumnOrder.push(`customField_${columnId}`)
       } else {
         warnings.push(`Removed missing custom field from column order: ${columnId}`)
       }

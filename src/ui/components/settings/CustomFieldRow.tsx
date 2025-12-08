@@ -26,10 +26,6 @@ interface CustomFieldRowProps {
   field: DisplayableField;
   getSetting: (key: string, defaultValue: any) => any;
   updateSetting: (key: string, value: any) => void;
-  tabsList: string[];
-  newTabInput: Record<number, string>;
-  setNewTabInput: React.Dispatch<React.SetStateAction<Record<number, string>>>;
-  handleAddTab: (fieldId: number, tabName: string) => void;
   draggedFieldId: string | number | null;
   onDragStart: (e: React.DragEvent, fieldId: string | number) => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -41,10 +37,6 @@ export function CustomFieldRow({
   field,
   getSetting,
   updateSetting,
-  tabsList,
-  newTabInput,
-  setNewTabInput,
-  handleAddTab,
   draggedFieldId,
   onDragStart,
   onDragOver,
@@ -53,30 +45,15 @@ export function CustomFieldRow({
 }: CustomFieldRowProps) {
   const isBuiltIn = 'isBuiltIn' in field && field.isBuiltIn;
   const fieldId = isBuiltIn ? (field as BuiltInField).id : (field as CustomField).id;
-  
+
   if (fieldId === undefined && !isBuiltIn) return null;
 
-  // Map built-in field IDs to their filter settings keys
-  // Some fields have legacy DOCUMENTS_FILTER_* keys, others use BUILT_IN_FIELD_FILTER_PREFIX
-  const getBuiltInFilterKey = (fieldId: string): string => {
-    const legacyMapping: Record<string, string> = {
-      'created': SETTINGS_KEYS.DOCUMENTS_FILTER_DATE_RANGE,
-      'category': SETTINGS_KEYS.DOCUMENTS_FILTER_CATEGORY,
-      'correspondent': SETTINGS_KEYS.DOCUMENTS_FILTER_CORRESPONDENT,
-      'asn': SETTINGS_KEYS.DOCUMENTS_FILTER_ASN,
-      'owner': SETTINGS_KEYS.DOCUMENTS_FILTER_OWNER,
-      'tags': SETTINGS_KEYS.DOCUMENTS_FILTER_TAGS,
-      'storage_path': SETTINGS_KEYS.DOCUMENTS_FILTER_STORAGE_PATH,
-    };
-    // Use legacy key if available, otherwise use the standard built-in field filter prefix
-    return legacyMapping[fieldId] || `${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}${fieldId}`;
-  };
-  
-  // For built-in fields, always return a filter key; for custom fields, use the numeric ID
-  const filterKey = isBuiltIn 
-    ? (fieldId && typeof fieldId === 'string' ? getBuiltInFilterKey(fieldId) : null)
+  // For built-in fields, use the consistent BUILT_IN_FIELD_FILTER_PREFIX format
+  // For custom fields, use the CUSTOM_FIELD_FILTER_PREFIX with numeric ID
+  const filterKey = isBuiltIn
+    ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}${fieldId}` : null)
     : `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_PREFIX}${fieldId}`;
-  const filterTypeKey = isBuiltIn 
+  const filterTypeKey = isBuiltIn
     ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_TYPE_PREFIX}${fieldId}` : null)
     : `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_TYPE_PREFIX}${fieldId}`;
   const tableColumnKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_TABLE_COLUMN_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_TABLE_COLUMN_PREFIX}${fieldId}`;
@@ -86,15 +63,14 @@ export function CustomFieldRow({
   const columnWidthKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `general-settings:documents:built-in-field:column-width:${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_COLUMN_WIDTH_PREFIX}${fieldId}`;
   const editModeKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_EDIT_MODE_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_PREFIX}${fieldId}`;
   const editModeEntryTypeKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX}${fieldId}`;
-  const tabKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_TAB_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_TAB_PREFIX}${fieldId}`;
-  
+
   const dataTypeLabel = DATA_TYPE_LABELS.find(
     (dt) => dt.id === field.data_type
   )?.name || field.data_type;
-  
+
   // Built-in fields can be toggled; get filter enabled state
   const isFilterEnabled = filterKey ? getSetting(filterKey, false) : false;
-  
+
   // Get default filter type for built-in fields based on their data type
   const getBuiltInDefaultFilterType = (fieldId: string): string => {
     const mapping: Record<string, string> = {
@@ -106,24 +82,24 @@ export function CustomFieldRow({
     };
     return mapping[fieldId] || 'populated';
   };
-  
+
   // Use local state for toggles to ensure immediate UI feedback
-  const [localTableColumnEnabled, setLocalTableColumnEnabled] = useState(() => 
+  const [localTableColumnEnabled, setLocalTableColumnEnabled] = useState(() =>
     isBuiltIn ? getSetting(tableColumnKey, true) : getSetting(tableColumnKey!, false)
   );
-  const [localFilterEnabled, setLocalFilterEnabled] = useState(() => 
+  const [localFilterEnabled, setLocalFilterEnabled] = useState(() =>
     filterKey ? getSetting(filterKey, false) : false
   );
-  const [localSpanBothRows, setLocalSpanBothRows] = useState(() => 
+  const [localSpanBothRows, setLocalSpanBothRows] = useState(() =>
     spanBothRowsKey ? getSetting(spanBothRowsKey, false) : false
   );
-  const [localShowOnSecondRow, setLocalShowOnSecondRow] = useState(() => 
+  const [localShowOnSecondRow, setLocalShowOnSecondRow] = useState(() =>
     showOnSecondRowKey ? getSetting(showOnSecondRowKey, false) : false
   );
-  const [localEditModeEnabled, setLocalEditModeEnabled] = useState(() => 
+  const [localEditModeEnabled, setLocalEditModeEnabled] = useState(() =>
     isBuiltIn ? false : getSetting(editModeKey!, false)
   );
-  
+
   // Sync local state with settings when they change externally
   // Use the actual setting value as dependency to avoid unnecessary re-runs
   const currentTableColumnValue = isBuiltIn ? getSetting(tableColumnKey, true) : getSetting(tableColumnKey!, false);
@@ -131,76 +107,75 @@ export function CustomFieldRow({
   const currentSpanBothRowsValue = spanBothRowsKey ? getSetting(spanBothRowsKey, false) : false;
   const currentShowOnSecondRowValue = showOnSecondRowKey ? getSetting(showOnSecondRowKey, false) : false;
   const currentEditModeValue = editModeKey ? getSetting(editModeKey, false) : false;
-  
+
   useEffect(() => {
     setLocalTableColumnEnabled(currentTableColumnValue);
   }, [currentTableColumnValue]);
-  
+
   useEffect(() => {
     if (filterKey) {
       setLocalFilterEnabled(currentFilterValue);
     }
   }, [filterKey, currentFilterValue]);
-  
+
   useEffect(() => {
     if (spanBothRowsKey) {
       setLocalSpanBothRows(currentSpanBothRowsValue);
     }
   }, [spanBothRowsKey, currentSpanBothRowsValue]);
-  
+
   useEffect(() => {
     if (showOnSecondRowKey) {
       setLocalShowOnSecondRow(currentShowOnSecondRowValue);
     }
   }, [showOnSecondRowKey, currentShowOnSecondRowValue]);
-  
+
   useEffect(() => {
     if (editModeKey) {
       setLocalEditModeEnabled(currentEditModeValue);
     }
   }, [editModeKey, currentEditModeValue]);
-  
+
   const isTableColumnEnabled = localTableColumnEnabled;
   const isEditModeEnabled = localEditModeEnabled;
-  
+
   const filterTypeOptions = getFilterTypeOptions(field.data_type);
   const tableDisplayTypeOptions = getTableDisplayTypeOptions();
   const editModeEntryTypeOptions = getEditModeEntryTypeOptions();
-  const currentFilterType = filterTypeKey 
+  const currentFilterType = filterTypeKey
     ? getSetting(filterTypeKey, isBuiltIn && fieldId && typeof fieldId === 'string' ? getBuiltInDefaultFilterType(fieldId) : getDefaultFilterType(field.data_type))
     : null;
   const currentTableDisplayType = tableDisplayTypeKey ? getSetting(tableDisplayTypeKey, getDefaultTableDisplayType(field.data_type)) : getDefaultTableDisplayType(field.data_type);
   const currentEditModeEntryType = editModeEntryTypeKey ? getSetting(editModeEntryTypeKey, getDefaultEditModeEntryType(field.data_type)) : null;
-  const currentTab = tabKey ? getSetting(tabKey, 'Default') : 'Default';
 
   // Get column width - handle both string and number types from settings
   const columnWidthRaw = getSetting(columnWidthKey, '');
   const initialColumnWidth = columnWidthRaw !== '' && columnWidthRaw !== null && columnWidthRaw !== undefined
     ? (typeof columnWidthRaw === 'number' ? String(columnWidthRaw) : String(columnWidthRaw))
     : '';
-  
+
   // Use local state for column width input to prevent remounting on every keystroke
   const [localColumnWidth, setLocalColumnWidth] = useState(initialColumnWidth);
-  
+
   // Sync local state when external setting changes
   useEffect(() => {
     setLocalColumnWidth(initialColumnWidth);
   }, [initialColumnWidth]);
-  
+
   const columnWidth = localColumnWidth;
 
   const fieldIdForDrag: string | number = isBuiltIn ? (field as BuiltInField).id : (fieldId as number);
   const isDraggingThis = draggedFieldId === fieldIdForDrag;
 
   return (
-    <Table.Row 
+    <Table.Row
       key={isBuiltIn ? `builtin-${fieldIdForDrag}` : fieldId}
       onDragOver={onDragOver}
       onDrop={(e) => onDrop(e, fieldIdForDrag)}
       className={isDraggingThis ? "opacity-50" : ""}
     >
       <Table.Cell>
-        <div 
+        <div
           className="flex items-center justify-center cursor-move"
           draggable={true}
           onDragStart={(e) => onDragStart(e, fieldIdForDrag)}
@@ -434,8 +409,8 @@ export function CustomFieldRow({
                     } else {
                       // Invalid input - revert to saved value
                       const savedValue = getSetting(columnWidthKey, '');
-                      const displayValue = savedValue === '' || savedValue === null || savedValue === undefined 
-                        ? '' 
+                      const displayValue = savedValue === '' || savedValue === null || savedValue === undefined
+                        ? ''
                         : (typeof savedValue === 'number' ? String(savedValue) : String(savedValue));
                       setLocalColumnWidth(displayValue);
                     }
@@ -517,103 +492,6 @@ export function CustomFieldRow({
               className="w-40 justify-between"
             >
               {editModeEntryTypeOptions.find(opt => opt.value === currentEditModeEntryType)?.label || "Select type"}
-            </Button>
-          )}
-        </div>
-      </Table.Cell>
-      <Table.Cell>
-        <div className="flex items-center justify-center gap-2">
-          {tabKey && isEditModeEnabled ? (
-            <div className="flex items-center gap-2">
-              <SubframeCore.DropdownMenu.Root>
-                <SubframeCore.DropdownMenu.Trigger asChild={true}>
-                  <Button
-                    variant="neutral-secondary"
-                    size="small"
-                    iconRight={<FeatherChevronDown />}
-                    className="w-32 justify-between"
-                  >
-                    {currentTab}
-                  </Button>
-                </SubframeCore.DropdownMenu.Trigger>
-                <SubframeCore.DropdownMenu.Portal>
-                  <SubframeCore.DropdownMenu.Content
-                    side="bottom"
-                    align="start"
-                    sideOffset={4}
-                    asChild={true}
-                    style={{ zIndex: 10001 }}
-                  >
-                    <DropdownMenu className="z-[10001]">
-                      {tabsList.map((tab) => (
-                        <DropdownMenu.DropdownItem
-                          key={tab}
-                          icon={null}
-                          onClick={() => {
-                            setTimeout(() => {
-                              if (tabKey) {
-                                updateSetting(tabKey, tab);
-                              }
-                            }, 200);
-                          }}
-                        >
-                          {tab}
-                        </DropdownMenu.DropdownItem>
-                      ))}
-                      {!isBuiltIn && (
-                        <>
-                          <DropdownMenu.DropdownDivider />
-                          <div className="px-3 py-2">
-                            <TextField>
-                              <TextField.Input
-                                placeholder="Enter new tab name"
-                                value={newTabInput[field.id! as number] || ''}
-                                onChange={(e) => {
-                                  const fieldId = field.id! as number;
-                                  setNewTabInput((prev) => ({
-                                    ...prev,
-                                    [fieldId]: e.target.value,
-                                  }));
-                                }}
-                                onKeyDown={(e) => {
-                                  const fieldId = field.id as number;
-                                  if (fieldId !== undefined && e.key === 'Enter' && newTabInput[fieldId]) {
-                                    handleAddTab(fieldId, newTabInput[fieldId]);
-                                    e.preventDefault();
-                                  }
-                                }}
-                              />
-                            </TextField>
-                            <Button
-                              variant="brand-primary"
-                              size="small"
-                              className="mt-2 w-full"
-                              onClick={() => {
-                                const fieldId = field.id as number;
-                                if (fieldId !== undefined && newTabInput[fieldId]) {
-                                  handleAddTab(fieldId, newTabInput[fieldId]);
-                                }
-                              }}
-                            >
-                              Add Tab
-                            </Button>
-                          </div>
-                        </>
-                      )}
-                    </DropdownMenu>
-                  </SubframeCore.DropdownMenu.Content>
-                </SubframeCore.DropdownMenu.Portal>
-              </SubframeCore.DropdownMenu.Root>
-            </div>
-          ) : (
-            <Button
-              variant="neutral-secondary"
-              size="small"
-              disabled={true}
-              iconRight={<FeatherChevronDown />}
-              className="w-32 justify-between"
-            >
-              {currentTab}
             </Button>
           )}
         </div>

@@ -249,7 +249,7 @@ export function useTableColumns({
       ({ fieldId, displayType, columnWidth }) => {
         const columnId = fieldId;
         const configuredSpanning = columnSpanning?.[columnId] === true;
-        
+
         // Helper function to get header name for built-in fields
         const getBuiltInFieldHeader = (id: string): string => {
           const headerMap: Record<string, string> = {
@@ -299,7 +299,7 @@ export function useTableColumns({
             },
           };
         }
-        
+
         // Special handling for tags - render as badges
         if (fieldId === 'tags') {
           return {
@@ -336,7 +336,7 @@ export function useTableColumns({
             },
           };
         }
-        
+
         // For other built-in fields, use generic rendering with display types
         return {
           id: columnId,
@@ -348,6 +348,7 @@ export function useTableColumns({
           size: columnWidth || builtInFieldWidths.get(fieldId),
           meta: {
             spanTwoRows: configuredSpanning,
+            showOnSecondRow: columnSpanning?.[`${fieldId}_secondRow`] === true,
           },
           cell: ({ row }) => {
             const value = getBuiltInFieldValue(row.original, fieldId);
@@ -363,11 +364,24 @@ export function useTableColumns({
 
     // Filter base columns based on enabled built-in fields (for backwards compatibility)
     // But prefer using builtInFieldColumns which uses display types
-    const baseColumns: ColumnDef<Document>[] = builtInFieldColumns.length > 0 
-      ? builtInFieldColumns 
+    const baseColumns: ColumnDef<Document>[] = builtInFieldColumns.length > 0
+      ? builtInFieldColumns
       : Object.entries(allBaseColumns)
-          .filter(([id]) => enabledBuiltInFields.has(id))
-          .map(([, col]) => col);
+        .filter(([id]) => enabledBuiltInFields.has(id))
+        .map(([id, col]) => ({
+          ...col,
+          meta: {
+            ...(col as any).meta,
+            spanTwoRows: columnSpanning?.[id] === true,
+            showOnSecondRow: columnSpanning?.[`${id}_secondRow`] === true,
+          },
+        }));
+
+    // Debug: Log column meta for secondRow
+    console.log('[useTableColumns] columnSpanning:', JSON.stringify(columnSpanning));
+    baseColumns.forEach(c => {
+      console.log('[useTableColumns] Column:', (c as any).id, 'meta:', c.meta);
+    });
 
     // Add custom field columns
     const customFieldColumns: ColumnDef<Document>[] = visibleCustomFieldColumns.map(
@@ -378,7 +392,7 @@ export function useTableColumns({
         const secondRowKey = `${columnId}_secondRow`;
         const configuredShowOnSecondRow = columnSpanning?.[secondRowKey] === true;
         const shouldSpanTwoRows = configuredSpanning || (field.name === 'Named Entities' || field.name === 'Topics / Concepts' || field.name === 'Summary');
-        
+
         return {
           id: columnId,
           accessorFn: (row) => getCustomFieldValue(row, field.id!),
@@ -419,10 +433,10 @@ export function useTableColumns({
         const doc = row.original;
         const docId = doc.id;
         if (docId === undefined) return null;
-        
+
         const isPinned = pinnedDocuments.has(docId);
         const isSelected = selectedDocuments.has(docId);
-        
+
         return (
           <div className="flex items-center gap-2">
             {/* Pin icon */}
@@ -434,12 +448,12 @@ export function useTableColumns({
               className="p-1 hover:bg-neutral-50 rounded flex-shrink-0"
               title={isPinned ? "Unpin document" : "Pin document"}
             >
-              <FeatherPin 
+              <FeatherPin
                 className={`w-4 h-4 ${isPinned ? 'text-success-600' : 'text-neutral-400'}`}
                 style={{ transform: isPinned ? 'rotate(45deg)' : 'none' }}
               />
             </button>
-            
+
             {/* Checkbox */}
             <Checkbox
               checked={isSelected}

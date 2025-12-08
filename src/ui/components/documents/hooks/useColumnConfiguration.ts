@@ -26,24 +26,36 @@ export function useColumnConfiguration({
   // Get custom fields that should be displayed as table columns, sorted by display order
   const visibleCustomFieldColumns = useMemo(() => {
     if (!customFields.length) return [];
-    
+
     // Use custom view settings if available
     if (appliedCustomView) {
       const columnFields: Array<{ field: CustomField; displayType: 'text' | 'date' | 'url' | 'checkbox' | 'list' | 'identifier'; columnWidth?: number }> = [];
-      
+
       // Get column order from custom view (includes both built-in and custom fields)
       const columnOrder = appliedCustomView.column_order || [];
-      
+
       // Extract custom field IDs from column_order (they're numbers)
-      const customFieldIdsInOrder = columnOrder.filter((id): id is number => typeof id === 'number');
-      
+      // Extract custom field IDs from column_order (they are strings in format "customField_ID")
+      const customFieldIdsInOrder: number[] = [];
+      columnOrder.forEach(id => {
+        if (typeof id === 'string' && id.startsWith('customField_')) {
+          const numId = parseInt(id.replace('customField_', ''), 10);
+          if (!isNaN(numId)) {
+            customFieldIdsInOrder.push(numId);
+          }
+        } else if (typeof id === 'number') {
+          // Legacy support for numeric IDs
+          customFieldIdsInOrder.push(id);
+        }
+      });
+
       // Get visibility map from custom view
       const columnVisibility = appliedCustomView.column_visibility || {};
-      
+
       // Get display types and sizing from custom view
       const columnDisplayTypes = appliedCustomView.column_display_types || {};
       const columnSizing = appliedCustomView.column_sizing || {};
-      
+
       // Create a map of custom fields by ID for quick lookup
       const customFieldMap = new Map<number, CustomField>();
       customFields.forEach(field => {
@@ -51,21 +63,21 @@ export function useColumnConfiguration({
           customFieldMap.set(field.id, field);
         }
       });
-      
+
       // Process fields in the order specified by column_order
       customFieldIdsInOrder.forEach(fieldId => {
         const field = customFieldMap.get(fieldId);
         if (!field) return;
-        
+
         // Check visibility - use customField_X key format
         const visibilityKey = `customField_${fieldId}`;
         const isVisible = columnVisibility[visibilityKey] !== false;
-        
+
         if (isVisible) {
           const displayType = columnDisplayTypes[fieldId] || getDefaultTableDisplayType(field.data_type);
           const sizingKey = `customField_${fieldId}`;
           const columnWidth = columnSizing[sizingKey];
-          
+
           columnFields.push({
             field,
             displayType: displayType as 'text' | 'date' | 'url' | 'checkbox' | 'list' | 'identifier',
@@ -73,19 +85,19 @@ export function useColumnConfiguration({
           });
         }
       });
-      
+
       // Add any remaining custom fields that are visible but not in column_order
       customFields.forEach((field) => {
         if (field.id === undefined) return;
         const visibilityKey = `customField_${field.id}`;
         const isVisible = columnVisibility[visibilityKey] !== false;
-        
+
         // Only add if not already in columnFields
         if (isVisible && !columnFields.find(cf => cf.field.id === field.id)) {
           const displayType = columnDisplayTypes[field.id] || getDefaultTableDisplayType(field.data_type);
           const sizingKey = `customField_${field.id}`;
           const columnWidth = columnSizing[sizingKey];
-          
+
           columnFields.push({
             field,
             displayType: displayType as 'text' | 'date' | 'url' | 'checkbox' | 'list' | 'identifier',
@@ -93,19 +105,19 @@ export function useColumnConfiguration({
           });
         }
       });
-      
+
       return columnFields;
     }
-    
+
     // Fall back to global settings
     if (!settings?.settings) return [];
-    
+
     const settingsObj = settings.settings as Record<string, any>;
     const displayOrder = settingsObj[SETTINGS_KEYS.CUSTOM_FIELD_DISPLAY_ORDER] || [];
-    
+
     // Get all fields that should be displayed as columns
     const columnFields: Array<{ field: CustomField; displayType: 'text' | 'date' | 'url' | 'checkbox' | 'list' | 'identifier'; columnWidth?: number }> = [];
-    
+
     customFields.forEach((field) => {
       if (field.id === undefined) return;
       const columnKey = `${SETTINGS_KEYS.CUSTOM_FIELD_TABLE_COLUMN_PREFIX}${field.id}`;
@@ -121,7 +133,7 @@ export function useColumnConfiguration({
         });
       }
     });
-    
+
     // Sort by display order
     if (displayOrder.length > 0) {
       columnFields.sort((a, b) => {
@@ -135,14 +147,14 @@ export function useColumnConfiguration({
         return aIndex - bIndex;
       });
     }
-    
+
     return columnFields;
   }, [settings, customFields, appliedCustomView]);
 
   // Get column order from custom view or settings (use pending if available)
   const columnOrderFromSettings = useMemo(() => {
     const { normalizeColumnOrder } = require('@/ui/utils/columnIdUtils');
-    
+
     // Prefer pending changes, then custom view column order
     let rawOrder: (string | number)[] | null = null;
     if (pendingColumnOrder !== null) {
@@ -154,7 +166,7 @@ export function useColumnConfiguration({
       const order = settingsObj[SETTINGS_KEYS.DOCUMENT_LIST_COLUMN_ORDER] as (string | number)[] | undefined;
       rawOrder = order || null;
     }
-    
+
     // Normalize to consistent format (returns string[])
     return rawOrder ? normalizeColumnOrder(rawOrder) : null;
   }, [settings, appliedCustomView, pendingColumnOrder]);
@@ -162,7 +174,7 @@ export function useColumnConfiguration({
   // Get column visibility from custom view or settings (use pending if available)
   const columnVisibilityFromSettings = useMemo(() => {
     const { normalizeColumnVisibility } = require('@/ui/utils/columnIdUtils');
-    
+
     // Prefer pending changes, then custom view column visibility
     let rawVisibility: Record<string, boolean> = {};
     if (pendingColumnVisibility !== null) {
@@ -170,7 +182,7 @@ export function useColumnConfiguration({
     } else if (appliedCustomView?.column_visibility) {
       rawVisibility = appliedCustomView.column_visibility;
     }
-    
+
     // Normalize to consistent format
     return normalizeColumnVisibility(rawVisibility);
   }, [appliedCustomView, pendingColumnVisibility]);
@@ -181,13 +193,13 @@ export function useColumnConfiguration({
     if (appliedCustomView) {
       const enabled = new Set<string>();
       const widths = new Map<string, number>();
-      
+
       // Get visibility and widths from custom view
       ['title', 'created', 'added', 'correspondent', 'asn', 'page_count', 'fileSize', 'category', 'owner', 'tags'].forEach(fieldId => {
         const isEnabled = appliedCustomView.column_visibility?.[fieldId] !== false;
         if (isEnabled) {
           enabled.add(fieldId);
-          
+
           // Get column width from custom view
           const width = appliedCustomView.column_sizing?.[fieldId];
           if (width && width > 0) {
@@ -195,10 +207,10 @@ export function useColumnConfiguration({
           }
         }
       });
-      
+
       return { enabledBuiltInFields: enabled, builtInFieldWidths: widths };
     }
-    
+
     // Fall back to global settings
     if (!settings?.settings) {
       // Default: all built-in fields enabled
@@ -210,14 +222,14 @@ export function useColumnConfiguration({
     const settingsObj = settings.settings as Record<string, any>;
     const enabled = new Set<string>();
     const widths = new Map<string, number>();
-    
+
     ['title', 'created', 'added', 'correspondent', 'asn', 'page_count', 'fileSize', 'category', 'owner', 'tags', 'summary'].forEach(fieldId => {
       const key = `${SETTINGS_KEYS.BUILT_IN_FIELD_TABLE_COLUMN_PREFIX}${fieldId}`;
       // Default to true if not set (only exclude if explicitly false)
       const isEnabled = settingsObj[key] !== false;
       if (isEnabled) {
         enabled.add(fieldId);
-        
+
         // Get column width for this field
         const widthKey = `general-settings:documents:built-in-field:column-width:${fieldId}`;
         const widthValue = settingsObj[widthKey];
@@ -229,7 +241,7 @@ export function useColumnConfiguration({
         }
       }
     });
-    
+
     return { enabledBuiltInFields: enabled, builtInFieldWidths: widths };
   }, [settings, appliedCustomView]);
 
@@ -239,12 +251,12 @@ export function useColumnConfiguration({
     if (appliedCustomView?.column_sizing) {
       return { ...appliedCustomView.column_sizing };
     }
-    
+
     // Fall back to global settings
     if (!settings?.settings) return {};
     const settingsObj = settings.settings as Record<string, any>;
     const sizing: Record<string, number> = {};
-    
+
     // Add built-in field widths
     ['title', 'created', 'added', 'correspondent', 'asn', 'page_count', 'fileSize', 'category', 'owner', 'tags', 'summary'].forEach(fieldId => {
       const widthKey = `general-settings:documents:built-in-field:column-width:${fieldId}`;
@@ -256,7 +268,7 @@ export function useColumnConfiguration({
         }
       }
     });
-    
+
     // Add custom field widths
     customFields.forEach(field => {
       if (field.id === undefined) return;
@@ -269,20 +281,20 @@ export function useColumnConfiguration({
         }
       }
     });
-    
+
     return sizing;
   }, [settings, customFields, appliedCustomView]);
 
   // Get built-in field display types and configuration
   const visibleBuiltInFieldColumns = useMemo(() => {
     const builtInFields: Array<{ fieldId: string; displayType: 'text' | 'date' | 'url' | 'checkbox' | 'list' | 'identifier'; columnWidth?: number }> = [];
-    
+
     // Use custom view settings if available
     if (appliedCustomView) {
       const columnDisplayTypes = appliedCustomView.column_display_types || {};
       const columnSizing = appliedCustomView.column_sizing || {};
       const columnVisibility = appliedCustomView.column_visibility || {};
-      
+
       // Check all built-in fields including tags
       ['title', 'created', 'added', 'correspondent', 'asn', 'page_count', 'fileSize', 'category', 'owner', 'tags'].forEach(fieldId => {
         const isEnabled = columnVisibility[fieldId] !== false;
@@ -290,7 +302,7 @@ export function useColumnConfiguration({
           // Get display type from custom view, or use default based on field type
           const displayType = columnDisplayTypes[fieldId] || getDefaultBuiltInFieldDisplayType(fieldId);
           const columnWidth = columnSizing[fieldId];
-          
+
           builtInFields.push({
             fieldId,
             displayType: displayType as 'text' | 'date' | 'url' | 'checkbox' | 'list' | 'identifier',
@@ -298,10 +310,10 @@ export function useColumnConfiguration({
           });
         }
       });
-      
+
       return builtInFields;
     }
-    
+
     // Fall back to global settings
     if (!settings?.settings) {
       // Default: return enabled fields with default display types
@@ -311,21 +323,21 @@ export function useColumnConfiguration({
         columnWidth: builtInFieldWidths.get(fieldId),
       }));
     }
-    
+
     const settingsObj = settings.settings as Record<string, any>;
-    
+
     Array.from(enabledBuiltInFields).forEach(fieldId => {
       const displayTypeKey = `general-settings:documents:built-in-field:display-type:${fieldId}`;
       const displayType = settingsObj[displayTypeKey] || getDefaultBuiltInFieldDisplayType(fieldId);
       const columnWidth = builtInFieldWidths.get(fieldId);
-      
+
       builtInFields.push({
         fieldId,
         displayType: displayType as 'text' | 'date' | 'url' | 'checkbox' | 'list' | 'identifier',
         columnWidth,
       });
     });
-    
+
     return builtInFields;
   }, [settings, appliedCustomView, enabledBuiltInFields, builtInFieldWidths]);
 

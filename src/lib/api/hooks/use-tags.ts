@@ -85,6 +85,7 @@ export function useTags() {
     update,
     delete: deleteTag,
     listAll,
+    refetch: listAllQuery.refetch,
     loading: listAllQuery.isLoading,
     error: listAllQuery.error,
     // Expose query data for direct access

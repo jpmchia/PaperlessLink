@@ -118,11 +118,11 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
     const startingDayOfWeek = firstDay.getDay();
 
     const days: Date[] = [];
-    
+
     // Add days from previous month to fill the first week
     const prevMonthLastDay = new Date(year, month, 0); // Last day of previous month
     const daysInPrevMonth = prevMonthLastDay.getDate();
-    
+
     // Add days from previous month (startingDayOfWeek tells us how many we need)
     // Example: If startingDayOfWeek is 3 (Wednesday), we need Mon(30), Tue(31), Wed(1)
     for (let i = 0; i < startingDayOfWeek; i++) {
@@ -130,12 +130,12 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
       const prevDate = new Date(year, month - 1, dayNumber);
       days.push(prevDate);
     }
-    
+
     // Add all days of the current month
     for (let day = 1; day <= daysInMonth; day++) {
       days.push(new Date(year, month, day));
     }
-    
+
     // Fill remaining cells to complete exactly 6 weeks (42 cells total)
     const totalDaysSoFar = days.length;
     const remainingCells = 42 - totalDaysSoFar;
@@ -143,13 +143,13 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
       const nextDate = new Date(year, month + 1, day);
       days.push(nextDate);
     }
-    
+
     // Ensure we always return exactly 42 days (6 weeks)
     if (days.length !== 42) {
       console.warn(`Calendar days array has ${days.length} items, expected 42`);
       return days.slice(0, 42);
     }
-    
+
     return days;
   };
 
@@ -183,13 +183,13 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
   const navigateMonth = (direction: 'prev' | 'next', isFirst: boolean) => {
     const targetDate = isFirst ? currentMonth : nextMonth;
     const newDate = new Date(targetDate);
-    
+
     if (direction === 'prev') {
       newDate.setMonth(newDate.getMonth() - 1);
     } else {
       newDate.setMonth(newDate.getMonth() + 1);
     }
-    
+
     if (isFirst) {
       setCurrentMonth(newDate);
       // Update next month to be one month after
@@ -205,7 +205,7 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
     const targetDate = isFirst ? currentMonth : nextMonth;
     const newDate = new Date(targetDate);
     newDate.setMonth(monthIndex);
-    
+
     if (isFirst) {
       setCurrentMonth(newDate);
       // Update next month to be one month after
@@ -221,7 +221,7 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
     const targetDate = isFirst ? currentMonth : nextMonth;
     const newDate = new Date(targetDate);
     newDate.setFullYear(year);
-    
+
     if (isFirst) {
       setCurrentMonth(newDate);
       // Update next month to be one month after
@@ -237,7 +237,7 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const newDate = new Date(today);
-    
+
     // Navigate to today's month
     if (isFirst) {
       setCurrentMonth(newDate);
@@ -247,7 +247,7 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
     } else {
       setNextMonth(newDate);
     }
-    
+
     // Select today's date
     handleDateClick(today, isFirst);
   };
@@ -268,7 +268,7 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
           <span className="text-body-bold font-body-bold text-default-font flex-none">
             {isFirst ? "From" : "To"}
           </span>
-          
+
           <SubframeCore.DropdownMenu.Root>
             <SubframeCore.DropdownMenu.Trigger asChild={true}>
               <Button
@@ -286,6 +286,7 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
                 align="start"
                 sideOffset={4}
                 asChild={true}
+                style={{ zIndex: 10001 }}
               >
                 <DropdownMenu>
                   {months.map((month, index) => (
@@ -318,6 +319,7 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
                 align="start"
                 sideOffset={4}
                 asChild={true}
+                style={{ zIndex: 10001 }}
               >
                 <DropdownMenu>
                   {getYears().map((year) => (
@@ -334,7 +336,7 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
             </SubframeCore.DropdownMenu.Portal>
           </SubframeCore.DropdownMenu.Root>
         </div>
-        
+
         {/* Navigation with Today button */}
         <div className="flex w-full items-center justify-between">
           <IconButton
@@ -366,31 +368,31 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
               </div>
             ))}
           </div>
-          
+
           {/* Calendar days */}
           {Array.from({ length: 6 }).map((_, weekIndex) => {
             const weekStart = weekIndex * 7;
             const weekEnd = weekStart + 7;
             const weekDays = days.slice(weekStart, weekEnd);
-            
+
             return (
               <div key={weekIndex} className="flex w-full items-center gap-1">
                 {weekDays.map((day, dayIndex) => {
                   const dayDate = new Date(day);
                   dayDate.setHours(0, 0, 0, 0);
-                  
+
                   // Check if this day belongs to the current month being displayed
                   const isCurrentMonth = day.getMonth() === date.getMonth();
-                  
+
                   const isStart = isDateStart(dayDate);
                   const isEnd = isDateEnd(dayDate);
                   const inMiddle = isDateInMiddle(dayDate);
 
                   let bgClass = isCurrentMonth ? "bg-neutral-100" : "";
-                  let textClass = isCurrentMonth 
-                    ? "text-body font-body text-subtext-color" 
+                  let textClass = isCurrentMonth
+                    ? "text-body font-body text-subtext-color"
                     : "text-body font-body text-neutral-400";
-                  
+
                   if (isStart || isEnd) {
                     bgClass = "bg-brand-primary";
                     textClass = "text-body-bold font-body-bold text-default-background";
@@ -448,18 +450,18 @@ export function DateRangePicker({ value, onChange, label, className }: DateRange
               {/* Date Range Display */}
               <div className="flex items-center gap-2">
                 <span className="text-body font-body text-default-font">
-                  {tempStart 
+                  {tempStart
                     ? tempStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                     : 'Select start date'}
                 </span>
                 <span className="text-body font-body text-subtext-color">-</span>
                 <span className="text-body font-body text-default-font">
-                  {tempEnd 
+                  {tempEnd
                     ? tempEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                     : 'Select end date'}
                 </span>
               </div>
-              
+
               {/* Action Buttons */}
               <div className="flex items-center gap-2">
                 <Button

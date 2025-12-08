@@ -27,6 +27,8 @@ export interface FilterVisibility {
   owner: boolean;
   status: boolean;
   asn: boolean;
+  // Allow for additional dynamic keys (custom field filters, individual date fields like 'created', 'added')
+  [key: string]: boolean;
 }
 
 const DEFAULT_FILTER_VISIBILITY: FilterVisibility = {
@@ -45,10 +47,10 @@ const DEFAULT_FILTER_VISIBILITY: FilterVisibility = {
  */
 export function useDocumentFilters() {
   const { settings } = useSettings();
-  
+
   // Filter visibility state
   const [filterVisibility, setFilterVisibility] = useState<FilterVisibility>(DEFAULT_FILTER_VISIBILITY);
-  
+
   // Filter selection state
   const [filters, setFilters] = useState<DocumentFilters>({
     dateRange: null,
@@ -67,14 +69,14 @@ export function useDocumentFilters() {
     if (settings?.settings) {
       const settingsObj = settings.settings as Record<string, any>;
       setFilterVisibility({
-        dateRange: settingsObj[SETTINGS_KEYS.DOCUMENTS_FILTER_DATE_RANGE] ?? DEFAULT_FILTER_VISIBILITY.dateRange,
-        category: settingsObj[SETTINGS_KEYS.DOCUMENTS_FILTER_CATEGORY] ?? DEFAULT_FILTER_VISIBILITY.category,
-        correspondent: settingsObj[SETTINGS_KEYS.DOCUMENTS_FILTER_CORRESPONDENT] ?? DEFAULT_FILTER_VISIBILITY.correspondent,
-        tags: settingsObj[SETTINGS_KEYS.DOCUMENTS_FILTER_TAGS] ?? DEFAULT_FILTER_VISIBILITY.tags,
-        storagePath: settingsObj[SETTINGS_KEYS.DOCUMENTS_FILTER_STORAGE_PATH] ?? DEFAULT_FILTER_VISIBILITY.storagePath,
-        owner: settingsObj[SETTINGS_KEYS.DOCUMENTS_FILTER_OWNER] ?? DEFAULT_FILTER_VISIBILITY.owner,
-        status: settingsObj[SETTINGS_KEYS.DOCUMENTS_FILTER_STATUS] ?? DEFAULT_FILTER_VISIBILITY.status,
-        asn: settingsObj[SETTINGS_KEYS.DOCUMENTS_FILTER_ASN] ?? DEFAULT_FILTER_VISIBILITY.asn,
+        dateRange: settingsObj[`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}created`] ?? DEFAULT_FILTER_VISIBILITY.dateRange,
+        category: settingsObj[`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}category`] ?? DEFAULT_FILTER_VISIBILITY.category,
+        correspondent: settingsObj[`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}correspondent`] ?? DEFAULT_FILTER_VISIBILITY.correspondent,
+        tags: settingsObj[`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}tags`] ?? DEFAULT_FILTER_VISIBILITY.tags,
+        storagePath: settingsObj[`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}storagePath`] ?? DEFAULT_FILTER_VISIBILITY.storagePath,
+        owner: settingsObj[`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}owner`] ?? DEFAULT_FILTER_VISIBILITY.owner,
+        status: settingsObj[`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}status`] ?? DEFAULT_FILTER_VISIBILITY.status,
+        asn: settingsObj[`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}asn`] ?? DEFAULT_FILTER_VISIBILITY.asn,
       });
     }
   }, [settings]);

@@ -4,10 +4,10 @@ import { Document } from '@/app/data/document';
 import { FilterRule } from '@/app/data/filter-rule';
 import { DocumentFilters } from './useDocumentFilters';
 import {
-  FILTER_CORRESPONDENT,
-  FILTER_DOCUMENT_TYPE,
+  FILTER_HAS_CORRESPONDENT_ANY,
+  FILTER_HAS_DOCUMENT_TYPE_ANY,
   FILTER_HAS_TAGS_ANY,
-  FILTER_STORAGE_PATH,
+  FILTER_HAS_STORAGE_PATH_ANY,
   FILTER_OWNER_ANY,
   FILTER_CREATED_AFTER,
   FILTER_CREATED_BEFORE,
@@ -26,31 +26,35 @@ const DEFAULT_PAGE_SIZE = 50;
 function filtersToFilterRules(filters: DocumentFilters): FilterRule[] {
   const rules: FilterRule[] = [];
 
-  // Correspondent filter
+  // Correspondent filter - use __in for multi-select (OR logic)
   if (filters.correspondent.length > 0) {
-    filters.correspondent.forEach(id => {
-      rules.push({ rule_type: FILTER_CORRESPONDENT, value: id.toString() });
+    rules.push({
+      rule_type: FILTER_HAS_CORRESPONDENT_ANY,
+      value: filters.correspondent.join(',')
     });
   }
 
-  // Category/Document Type filter
+  // Category/Document Type filter - use __in for multi-select (OR logic)
   if (filters.category.length > 0) {
-    filters.category.forEach(id => {
-      rules.push({ rule_type: FILTER_DOCUMENT_TYPE, value: id.toString() });
+    rules.push({
+      rule_type: FILTER_HAS_DOCUMENT_TYPE_ANY,
+      value: filters.category.join(',')
     });
   }
 
-  // Tags filter
+  // Tags filter - already uses __in
   if (filters.tags.length > 0) {
-    filters.tags.forEach(id => {
-      rules.push({ rule_type: FILTER_HAS_TAGS_ANY, value: id.toString() });
+    rules.push({
+      rule_type: FILTER_HAS_TAGS_ANY,
+      value: filters.tags.join(',')
     });
   }
 
-  // Storage Path filter
+  // Storage Path filter - use __in for multi-select (OR logic)
   if (filters.storagePath.length > 0) {
-    filters.storagePath.forEach(id => {
-      rules.push({ rule_type: FILTER_STORAGE_PATH, value: id.toString() });
+    rules.push({
+      rule_type: FILTER_HAS_STORAGE_PATH_ANY,
+      value: filters.storagePath.join(',')
     });
   }
 
@@ -90,7 +94,7 @@ function filtersToFilterRules(filters: DocumentFilters): FilterRule[] {
   // See: https://docs.paperless-ngx.com/api/#filtering-by-custom-fields
   const customFieldQueries = buildCustomFieldQueries(filters.customFields);
   const combinedQuery = combineCustomFieldQueries(customFieldQueries);
-  
+
   if (combinedQuery) {
     // Convert to JSON string for the API
     const queryString = JSON.stringify(combinedQuery);
@@ -106,12 +110,12 @@ function filtersToFilterRules(filters: DocumentFilters): FilterRule[] {
  */
 export function useDocumentList(pageSize: number = DEFAULT_PAGE_SIZE, filters?: DocumentFilters) {
   const { listFiltered, loading } = useDocuments();
-  
+
   const [documents, setDocuments] = useState<Document[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -121,12 +125,12 @@ export function useDocumentList(pageSize: number = DEFAULT_PAGE_SIZE, filters?: 
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
-    
+
     searchTimeoutRef.current = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
       setCurrentPage(1); // Reset to first page when search changes
     }, 400);
-    
+
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
@@ -147,10 +151,10 @@ export function useDocumentList(pageSize: number = DEFAULT_PAGE_SIZE, filters?: 
       if (debouncedSearchQuery) {
         extraParams.query = debouncedSearchQuery;
       }
-      
+
       // Convert filters to FilterRules
       const filterRules = filters ? filtersToFilterRules(filters) : undefined;
-      
+
       // Debug logging to verify filters are being applied
       if (filterRules && filterRules.length > 0) {
         console.log('Applied filter rules:', filterRules);
@@ -158,27 +162,27 @@ export function useDocumentList(pageSize: number = DEFAULT_PAGE_SIZE, filters?: 
         const queryParams = queryParamsFromFilterRules(filterRules);
         console.log('Query params:', queryParams);
       }
-      
+
       const response = await listFiltered({
         page: currentPage,
         pageSize,
         filterRules: filterRules && filterRules.length > 0 ? filterRules : undefined,
         extraParams: Object.keys(extraParams).length > 0 ? extraParams : undefined,
       });
-      
+
       // Debug logging for empty results
       if ((response.results || []).length === 0 && filterRules && filterRules.length > 0) {
         console.warn('No documents returned with filters applied. Filter rules:', filterRules);
         console.warn('Response:', { count: response.count, results: response.results });
       }
-      
+
       setDocuments(response.results || []);
       setTotalCount(response.count || 0);
     } catch (error) {
       console.error("Failed to fetch documents:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to fetch documents";
       setError(errorMessage);
-      
+
       // If we get an "Invalid page" error, reset to page 1 and retry
       if (errorMessage.includes("Invalid page") || errorMessage.includes("404")) {
         console.log("Invalid page error detected, resetting to page 1");

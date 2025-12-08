@@ -20,7 +20,7 @@ export function DocumentsTab({ getSetting, updateSetting }: DocumentsTabProps) {
           Choose which filters to display on the Documents page
         </span>
       </div>
-      
+
       <div className="flex items-center justify-between">
         <div className="flex flex-col items-start gap-1">
           <span className="text-body-bold font-body-bold text-default-font">
@@ -31,9 +31,9 @@ export function DocumentsTab({ getSetting, updateSetting }: DocumentsTabProps) {
           </span>
         </div>
         <Switch
-          checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_DATE_RANGE, true)}
+          checked={getSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}created`, true)}
           onCheckedChange={(checked) =>
-            updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_DATE_RANGE, checked)
+            updateSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}created`, checked)
           }
         />
       </div>
@@ -48,9 +48,9 @@ export function DocumentsTab({ getSetting, updateSetting }: DocumentsTabProps) {
           </span>
         </div>
         <Switch
-          checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_CATEGORY, true)}
+          checked={getSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}category`, true)}
           onCheckedChange={(checked) =>
-            updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_CATEGORY, checked)
+            updateSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}category`, checked)
           }
         />
       </div>
@@ -65,9 +65,9 @@ export function DocumentsTab({ getSetting, updateSetting }: DocumentsTabProps) {
           </span>
         </div>
         <Switch
-          checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_CORRESPONDENT, false)}
+          checked={getSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}correspondent`, false)}
           onCheckedChange={(checked) =>
-            updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_CORRESPONDENT, checked)
+            updateSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}correspondent`, checked)
           }
         />
       </div>
@@ -82,9 +82,9 @@ export function DocumentsTab({ getSetting, updateSetting }: DocumentsTabProps) {
           </span>
         </div>
         <Switch
-          checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_TAGS, false)}
+          checked={getSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}tags`, false)}
           onCheckedChange={(checked) =>
-            updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_TAGS, checked)
+            updateSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}tags`, checked)
           }
         />
       </div>
@@ -99,9 +99,9 @@ export function DocumentsTab({ getSetting, updateSetting }: DocumentsTabProps) {
           </span>
         </div>
         <Switch
-          checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_STORAGE_PATH, false)}
+          checked={getSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}storagePath`, false)}
           onCheckedChange={(checked) =>
-            updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_STORAGE_PATH, checked)
+            updateSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}storagePath`, checked)
           }
         />
       </div>
@@ -116,9 +116,9 @@ export function DocumentsTab({ getSetting, updateSetting }: DocumentsTabProps) {
           </span>
         </div>
         <Switch
-          checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_OWNER, true)}
+          checked={getSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}owner`, true)}
           onCheckedChange={(checked) =>
-            updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_OWNER, checked)
+            updateSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}owner`, checked)
           }
         />
       </div>
@@ -133,9 +133,9 @@ export function DocumentsTab({ getSetting, updateSetting }: DocumentsTabProps) {
           </span>
         </div>
         <Switch
-          checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_STATUS, true)}
+          checked={getSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}status`, true)}
           onCheckedChange={(checked) =>
-            updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_STATUS, checked)
+            updateSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}status`, checked)
           }
         />
       </div>
@@ -150,9 +150,9 @@ export function DocumentsTab({ getSetting, updateSetting }: DocumentsTabProps) {
           </span>
         </div>
         <Switch
-          checked={getSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_ASN, false)}
+          checked={getSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}asn`, false)}
           onCheckedChange={(checked) =>
-            updateSetting(SETTINGS_KEYS.DOCUMENTS_FILTER_ASN, checked)
+            updateSetting(`${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}asn`, checked)
           }
         />
       </div>
