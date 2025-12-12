@@ -47,7 +47,45 @@ export function FilterVisibilityDropdown({
   onCustomFieldVisibilityChange,
   pendingFilterVisibility,
 }: FilterVisibilityDropdownProps) {
-  const filterKeys = Object.keys(filterVisibility) as Array<keyof FilterVisibility>;
+  // Define the known built-in filter keys (only show these, not settings-prefixed keys)
+  const KNOWN_BUILT_IN_FILTER_KEYS = [
+    'dateRange', 'created', 'added', 'category', 'correspondent', 
+    'tags', 'storagePath', 'owner', 'status', 'asn', 
+    'title', 'page_count', 'fileSize'
+  ] as const;
+  
+  // Get set of custom field names (case-insensitive) to avoid duplicates
+  const customFieldNamesSet = useMemo(() => {
+    return new Set(customFields.map(field => field.name?.toLowerCase()).filter(Boolean));
+  }, [customFields]);
+  
+  // Filter to only show known built-in filter keys (exclude settings-prefixed keys and custom field keys)
+  // Also exclude built-in keys that match custom field names to avoid duplicates
+  const builtInFilterKeys = useMemo(() => {
+    const allKeys = Object.keys(filterVisibility);
+    return allKeys.filter(key => {
+      // Must be a known built-in filter key
+      if (!KNOWN_BUILT_IN_FILTER_KEYS.includes(key as any)) return false;
+      
+      // Exclude settings-prefixed keys
+      if (key.startsWith('general-settings:')) return false;
+      
+      // Exclude custom field keys
+      if (key.startsWith('customField_')) return false;
+      
+      // Exclude numeric-only keys (custom field IDs)
+      if (/^\d+$/.test(key)) return false;
+      
+      // Exclude if a custom field exists with the same name (case-insensitive)
+      // Check both the key itself and the label
+      const label = FILTER_LABELS[key] || key;
+      const keyLower = key.toLowerCase();
+      const labelLower = label.toLowerCase();
+      if (customFieldNamesSet.has(keyLower) || customFieldNamesSet.has(labelLower)) return false;
+      
+      return true;
+    }) as Array<keyof FilterVisibility>;
+  }, [filterVisibility, customFieldNamesSet]);
   
   // Get custom field filter visibility from tableConfig (pendingFilterVisibility)
   // This includes both the active view state and any unsaved changes
@@ -83,7 +121,7 @@ export function FilterVisibilityDropdown({
   }, [customFields, pendingFilterVisibility]);
   
   // Count how many filters are visible (built-in + custom)
-  const builtInVisibleCount = filterKeys.filter(key => filterVisibility[key]).length;
+  const builtInVisibleCount = builtInFilterKeys.filter(key => filterVisibility[key]).length;
   const customFieldVisibleCount = Object.values(customFieldVisibility).filter(v => v).length;
   const visibleCount = builtInVisibleCount + customFieldVisibleCount;
 
@@ -108,8 +146,8 @@ export function FilterVisibilityDropdown({
           style={{ width: '240px', maxHeight: '400px', overflowY: 'auto', zIndex: 10000 }}
         >
           <DropdownMenu>
-            {/* Built-in filters */}
-            {filterKeys.map((key) => {
+            {/* Built-in filters - only show known filter keys */}
+            {builtInFilterKeys.map((key) => {
               const isVisible = filterVisibility[key];
               const label = FILTER_LABELS[key] || key;
 
@@ -136,7 +174,7 @@ export function FilterVisibilityDropdown({
             {/* Custom field filters - show for all views, not just custom views */}
             {customFields.length > 0 && (
               <>
-                {filterKeys.length > 0 && (
+                {builtInFilterKeys.length > 0 && (
                   <div className="h-px bg-neutral-border my-1" />
                 )}
                 {customFields.map((field) => {

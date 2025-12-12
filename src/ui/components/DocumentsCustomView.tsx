@@ -136,25 +136,48 @@ export function DocumentsTableFeature() {
     if (activeViewId && activeView?.filter_visibility) {
       // Use view's filter visibility exclusively - all filters are hidden unless explicitly enabled
       const viewFilters = tableConfig.filterVisibility || {};
+      
+      // Helper to check multiple key formats (simple key, settings-prefixed key)
+      // IMPORTANT: Check if key exists in viewFilters first (even if false) to preserve explicit toggles
+      const getFilterVisibility = (simpleKey: string): boolean => {
+        // If explicitly set in viewFilters (even if false), use that value
+        if (simpleKey in viewFilters) {
+          return viewFilters[simpleKey] === true;
+        }
+        // Otherwise check settings-prefixed key
+        const settingsKey = `general-settings:documents:built-in-field:filter:${simpleKey}`;
+        if (settingsKey in viewFilters) {
+          return viewFilters[settingsKey] === true;
+        }
+        return false;
+      };
+      
       return {
         // Legacy dateRange for backwards compat - true if either created or added is enabled
-        dateRange: viewFilters['dateRange'] || viewFilters['created'] || viewFilters['added'] || false,
+        dateRange: getFilterVisibility('dateRange') || getFilterVisibility('created') || getFilterVisibility('added') || false,
         // Also expose individual created/added for dynamic rendering
-        created: viewFilters['created'] ?? false,
-        added: viewFilters['added'] ?? false,
+        created: getFilterVisibility('created'),
+        added: getFilterVisibility('added'),
         // Other built-in fields
-        category: viewFilters['category'] ?? false,
-        correspondent: viewFilters['correspondent'] ?? false,
-        tags: viewFilters['tags'] ?? false,
-        storagePath: viewFilters['storagePath'] ?? false,
-        owner: viewFilters['owner'] ?? false,
-        status: viewFilters['status'] ?? false,
-        asn: viewFilters['asn'] ?? false,
-        title: viewFilters['title'] ?? false,
-        page_count: viewFilters['page_count'] ?? false,
-        fileSize: viewFilters['fileSize'] ?? false,
+        category: getFilterVisibility('category'),
+        correspondent: getFilterVisibility('correspondent'),
+        tags: getFilterVisibility('tags'),
+        storagePath: getFilterVisibility('storagePath'),
+        owner: getFilterVisibility('owner'),
+        status: getFilterVisibility('status'),
+        asn: getFilterVisibility('asn'),
+        title: getFilterVisibility('title'),
+        page_count: getFilterVisibility('page_count'),
+        fileSize: getFilterVisibility('fileSize'),
         // Include any custom field filter visibility keys (these use customField_ prefix)
-        ...viewFilters
+        // Only include keys that aren't built-in fields to avoid conflicts
+        ...Object.fromEntries(
+          Object.entries(viewFilters).filter(([key]) => 
+            !['dateRange', 'created', 'added', 'category', 'correspondent', 'tags', 
+              'storagePath', 'owner', 'status', 'asn', 'title', 'page_count', 'fileSize'].includes(key) &&
+            !key.startsWith('general-settings:documents:built-in-field:filter:')
+          )
+        )
       } as FilterVisibility;
     }
     return globalFilterVisibility;

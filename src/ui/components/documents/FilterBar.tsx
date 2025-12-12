@@ -570,13 +570,27 @@ export const FilterBar = memo<FilterBarProps>(({
           const config = builtInFilterConfigs[fieldId as string];
           if (!config) return null;
 
-          // Check filter visibility - prioritize field-specific visibility (from view settings)
-          // Only fall back to legacy visibilityKey if fieldId is not explicitly defined
+          // Check filter visibility - check multiple possible key formats
           const filterVisibilityRecord = filterVisibility as Record<string, boolean>;
+          
+          // Try multiple key formats:
+          // 1. Direct fieldId (e.g., "created", "category")
+          // 2. Legacy visibilityKey (e.g., "dateRange" for "created")
+          // 3. Settings-prefixed key (for backwards compatibility)
+          const settingsKey = `${SETTINGS_KEYS.BUILT_IN_FIELD_FILTER_PREFIX}${fieldId}`;
+          
           const isVisibleByFieldId = filterVisibilityRecord[fieldId];
           const isVisibleByKey = filterVisibility[config.visibilityKey];
-          // Use fieldId if explicitly set, otherwise fall back to legacy key
-          const isVisible = isVisibleByFieldId !== undefined ? isVisibleByFieldId : isVisibleByKey;
+          const isVisibleBySettingsKey = filterVisibilityRecord[settingsKey];
+          
+          // Use fieldId if explicitly set, then visibilityKey, then settings key, default to false
+          const isVisible = isVisibleByFieldId !== undefined 
+            ? isVisibleByFieldId 
+            : isVisibleByKey !== undefined
+            ? isVisibleByKey
+            : isVisibleBySettingsKey !== undefined
+            ? isVisibleBySettingsKey
+            : false;
 
           if (!isVisible) return null;
 
