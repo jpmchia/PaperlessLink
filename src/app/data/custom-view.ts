@@ -20,6 +20,7 @@ export interface CustomView extends ObjectWithPermissions {
   column_sizing: Record<string, number>  // Map of column ID to pixel width
   column_visibility: Record<string, boolean>  // Map of built-in field ID to visibility
   column_display_types: Record<string, 'text' | 'date' | 'url' | 'checkbox' | 'list' | 'identifier'>  // Map of custom field ID to display type
+  column_styles?: Record<string, string> // Map of column ID to custom CSS string
 
   // Filter configuration - stored as filter rules (same format as SavedView)
   filter_rules?: Array<{

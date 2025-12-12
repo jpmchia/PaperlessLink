@@ -235,6 +235,7 @@ export function DocumentsTableFeature() {
     onTogglePin: handleTogglePin,
     onToggleSelect: handleToggleSelect,
     columnSpanning: tableConfig.columnSpanning,
+    columnStyles: tableConfig.columnStyles,
   });
 
 

@@ -8,6 +8,9 @@ import { useCustomFields } from "@/lib/api/hooks";
 import { Button } from "../Button";
 import { useCustomViews } from "@/lib/api/hooks";
 import { CustomView } from "@/app/data/custom-view";
+import { Alert } from "../Alert";
+import { FeatherAlertCircle, FeatherRefreshCw } from "@subframe/core";
+import { detectError } from "@/lib/utils/errorUtils";
 
 interface CustomFieldsTabProps {
   // Kept for compatibility with SettingsModal layout but mostly unused now
@@ -27,7 +30,14 @@ export function CustomFieldsTab({ onClose }: CustomFieldsTabProps) {
   const { data: customFieldsData, loading: isLoadingFields } = useCustomFields();
   const customFields = customFieldsData?.results || [];
 
-  const { create: createView, delete: deleteView } = useCustomViews();
+  const { create: createView, delete: deleteView, isCreating, error: customViewsError, refetch: refetchCustomViews } = useCustomViews();
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log('[CustomFieldsTab] availableViews:', availableViews);
+    console.log('[CustomFieldsTab] isLoadingViews:', isLoadingViews);
+    console.log('[CustomFieldsTab] activeViewId:', activeViewId);
+  }, [availableViews, isLoadingViews, activeViewId]);
 
   const handleCreateView = async () => {
     // Create a new blank view
@@ -43,12 +53,20 @@ export function CustomFieldsTab({ onClose }: CustomFieldsTabProps) {
       filter_visibility: {},
     };
     try {
+      console.log('[CustomFieldsTab] Creating new view...', newViewData);
       const newView = await createView(newViewData);
+      console.log('[CustomFieldsTab] View created successfully:', newView);
       if (newView && newView.id) {
+        console.log('[CustomFieldsTab] Setting active view ID to:', newView.id);
         setActiveViewId(newView.id);
+      } else {
+        console.warn('[CustomFieldsTab] Created view but no ID returned:', newView);
+        alert('View created but could not be opened. Please refresh the page.');
       }
-    } catch (e) {
-      console.error("Failed to create view", e);
+    } catch (e: any) {
+      console.error("[CustomFieldsTab] Failed to create view", e);
+      const errorInfo = detectError(e);
+      alert(`Failed to create view: ${errorInfo.userMessage}`);
     }
   };
 
@@ -70,19 +88,29 @@ export function CustomFieldsTab({ onClose }: CustomFieldsTabProps) {
         sort_field: view.sort_field,
         sort_reverse: view.sort_reverse,
       };
-      await createView(duplicateData);
-    } catch (e) {
-      console.error("Failed to duplicate view", e);
+      console.log('[CustomFieldsTab] Duplicating view...', duplicateData);
+      const duplicatedView = await createView(duplicateData);
+      console.log('[CustomFieldsTab] View duplicated successfully:', duplicatedView);
+    } catch (e: any) {
+      console.error("[CustomFieldsTab] Failed to duplicate view", e);
+      const errorInfo = detectError(e);
+      alert(`Failed to duplicate view: ${errorInfo.userMessage}`);
     }
   };
 
   const handleDelete = async (view: CustomView) => {
     if (!view.id) return;
     if (confirm(`Are you sure you want to delete "${view.name}"?`)) {
-      if (activeViewId === view.id) {
-        setActiveViewId(null);
+      try {
+        if (activeViewId === view.id) {
+          setActiveViewId(null);
+        }
+        await deleteView(view.id);
+      } catch (e: any) {
+        console.error("[CustomFieldsTab] Failed to delete view", e);
+        const errorInfo = detectError(e);
+        alert(`Failed to delete view: ${errorInfo.userMessage}`);
       }
-      await deleteView(view.id);
     }
   };
 
@@ -98,6 +126,8 @@ export function CustomFieldsTab({ onClose }: CustomFieldsTabProps) {
   }
 
   // Otherwise show the list
+  const errorInfo = customViewsError ? detectError(customViewsError) : null;
+
   return (
     <div className="flex flex-col gap-4 h-full min-h-0 overflow-hidden p-6">
       <div className="flex items-center justify-between w-full flex-none">
@@ -109,18 +139,73 @@ export function CustomFieldsTab({ onClose }: CustomFieldsTabProps) {
             Manage your custom document list views
           </span>
         </div>
-        <Button variant="brand-primary" size="small" onClick={handleCreateView}>
-          New View
+        <Button 
+          variant="brand-primary" 
+          size="small" 
+          onClick={handleCreateView}
+          disabled={isCreating || !!customViewsError}
+        >
+          {isCreating ? "Creating..." : "New View"}
         </Button>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <CustomViewsListTable
-          customViews={availableViews}
-          onEdit={(view) => setActiveViewId(view.id || null)}
-          onDelete={handleDelete}
-          onDuplicate={handleDuplicate}
+      {/* Error Alert */}
+      {errorInfo && (
+        <Alert
+          variant="error"
+          icon={<FeatherAlertCircle />}
+          title={errorInfo.type === 'backend-unavailable' || errorInfo.type === 'network' 
+            ? "Backend Service Unavailable" 
+            : "Error Loading Custom Views"}
+          description={
+            <div className="flex flex-col gap-2">
+              <span>{errorInfo.userMessage}</span>
+              {errorInfo.actionable && (
+                <div className="mt-2">
+                  <Button
+                    variant="neutral-tertiary"
+                    size="small"
+                    icon={<FeatherRefreshCw />}
+                    onClick={() => refetchCustomViews()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              )}
+            </div>
+          }
         />
+      )}
+
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {isLoadingViews ? (
+          <div className="flex items-center justify-center py-8">
+            <span className="text-body font-body text-subtext-color">
+              Loading custom views...
+            </span>
+          </div>
+        ) : errorInfo && (errorInfo.type === 'backend-unavailable' || errorInfo.type === 'network') ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-2">
+            <span className="text-body font-body text-subtext-color text-center">
+              Unable to load custom views. Please check that the Paperless Link Service is running and accessible.
+            </span>
+            <Button
+              variant="neutral-tertiary"
+              size="small"
+              icon={<FeatherRefreshCw />}
+              onClick={() => refetchCustomViews()}
+            >
+              Retry Connection
+            </Button>
+          </div>
+        ) : (
+          <CustomViewsListTable
+            customViews={availableViews}
+            onEdit={(view) => setActiveViewId(view.id || null)}
+            onDelete={handleDelete}
+            onDuplicate={handleDuplicate}
+          />
+        )}
       </div>
     </div>
   );

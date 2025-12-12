@@ -20,6 +20,7 @@ export interface TableConfig {
     subrowEnabled?: boolean;
     subrowContent?: 'summary' | 'tags' | 'none';
     sorting?: Array<{ id: string; desc: boolean }>;
+    columnStyles: Record<string, string>;
 }
 
 export interface DocumentsContextType {
@@ -55,6 +56,7 @@ export interface DocumentsContextType {
     updateColumnSpanning: (spanning: Record<string, boolean>) => void;
     updateSorting: (sorting: Array<{ id: string; desc: boolean }>) => void;
     updateColumnDisplayTypes: (displayTypes: Record<string, string>) => void;
+    updateColumnStyles: (styles: Record<string, string>) => void;
 
     // Metadata Actions
     updateViewName: (name: string) => void;
@@ -71,6 +73,7 @@ export interface DocumentsContextType {
         filterTypes?: Record<string, string>;
         editModeSettings?: Record<string, { enabled: boolean; entry_type?: string }>;
         columnSpanning?: Record<string, boolean>;
+        columnStyles?: Record<string, string>;
         name?: string;
         description?: string;
         is_global?: boolean;

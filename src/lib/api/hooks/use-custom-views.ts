@@ -5,6 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { CustomView } from '@/app/data/custom-view'
 import { CustomViewService } from '../services/custom-view.service'
+import { detectError, isBackendUnavailable } from '@/lib/utils/errorUtils'
 
 const customViewService = new CustomViewService()
 
@@ -26,10 +27,35 @@ export function useCustomViews() {
         // If API endpoint doesn't exist (403/404), return empty array gracefully
         if (err?.status === 403 || err?.status === 404) {
           console.warn('[useCustomViews] Custom views API endpoint not available (403/404):', err)
-          return []
+          const errorInfo = detectError(err)
+          console.warn('[useCustomViews] Error info:', errorInfo)
+          // Still throw so error state is set, but with better error message
+          const enhancedError = new Error(errorInfo.userMessage)
+          ;(enhancedError as any).status = err?.status
+          ;(enhancedError as any).originalError = err
+          ;(enhancedError as any).errorInfo = errorInfo
+          throw enhancedError
         }
+        
+        // Detect and enhance network/backend errors
+        if (isBackendUnavailable(err)) {
+          const errorInfo = detectError(err)
+          console.error('[useCustomViews] Backend unavailable:', errorInfo)
+          const enhancedError = new Error(errorInfo.userMessage)
+          ;(enhancedError as any).status = err?.status
+          ;(enhancedError as any).originalError = err
+          ;(enhancedError as any).errorInfo = errorInfo
+          ;(enhancedError as any).isBackendUnavailable = true
+          throw enhancedError
+        }
+        
         console.error('[useCustomViews] Error fetching custom views:', err)
-        throw err
+        const errorInfo = detectError(err)
+        const enhancedError = new Error(errorInfo.userMessage)
+        ;(enhancedError as any).status = err?.status
+        ;(enhancedError as any).originalError = err
+        ;(enhancedError as any).errorInfo = errorInfo
+        throw enhancedError
       }
     },
     retry: (failureCount, error: any) => {
@@ -50,16 +76,28 @@ export function useCustomViews() {
   const createMutation = useMutation({
     mutationFn: async (data: Omit<CustomView, 'id'>) => {
       try {
-        return await customViewService.create(data)
+        console.log('[useCustomViews] Creating view with data:', data)
+        const result = await customViewService.create(data)
+        console.log('[useCustomViews] View created successfully:', result)
+        return result
       } catch (err: any) {
-        if (err?.status === 403 || err?.status === 404) {
-          throw new Error('Custom views API endpoint is not available. Please check backend implementation.')
-        }
-        throw err
+        console.error('[useCustomViews] Error creating view:', err)
+        const errorInfo = detectError(err)
+        const enhancedError = new Error(errorInfo.userMessage)
+        ;(enhancedError as any).status = err?.status
+        ;(enhancedError as any).originalError = err
+        ;(enhancedError as any).errorInfo = errorInfo
+        throw enhancedError
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY })
+    onSuccess: async (data) => {
+      console.log('[useCustomViews] Mutation success, invalidating queries. Created view:', data)
+      await queryClient.invalidateQueries({ queryKey: QUERY_KEY })
+      // Refetch to ensure UI updates immediately
+      await queryClient.refetchQueries({ queryKey: QUERY_KEY })
+    },
+    onError: (error) => {
+      console.error('[useCustomViews] Mutation error:', error)
     },
   })
 
@@ -69,10 +107,12 @@ export function useCustomViews() {
       try {
         return await customViewService.update(id, data)
       } catch (err: any) {
-        if (err?.status === 403 || err?.status === 404) {
-          throw new Error('Custom views API endpoint is not available. Please check backend implementation.')
-        }
-        throw err
+        const errorInfo = detectError(err)
+        const enhancedError = new Error(errorInfo.userMessage)
+        ;(enhancedError as any).status = err?.status
+        ;(enhancedError as any).originalError = err
+        ;(enhancedError as any).errorInfo = errorInfo
+        throw enhancedError
       }
     },
     onSuccess: () => {
@@ -86,10 +126,12 @@ export function useCustomViews() {
       try {
         return await customViewService.delete(id)
       } catch (err: any) {
-        if (err?.status === 403 || err?.status === 404) {
-          throw new Error('Custom views API endpoint is not available. Please check backend implementation.')
-        }
-        throw err
+        const errorInfo = detectError(err)
+        const enhancedError = new Error(errorInfo.userMessage)
+        ;(enhancedError as any).status = err?.status
+        ;(enhancedError as any).originalError = err
+        ;(enhancedError as any).errorInfo = errorInfo
+        throw enhancedError
       }
     },
     onSuccess: () => {

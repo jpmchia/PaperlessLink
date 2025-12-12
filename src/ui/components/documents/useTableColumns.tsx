@@ -8,6 +8,7 @@ import { CustomFieldDisplay } from "@/ui/components/CustomFieldDisplay";
 import { Checkbox } from "@/ui/components/Checkbox";
 import { FeatherFileText, FeatherPin } from "@subframe/core";
 import { formatDate, getCustomFieldValue, resolveCustomFieldValue } from './documentUtils';
+import { parseCssString } from '@/ui/utils/styleUtils';
 
 interface ColumnOptions {
   documentTypes: Array<{ id?: number; name?: string }>;
@@ -31,6 +32,7 @@ interface ColumnOptions {
   onTogglePin?: (docId: number) => void;
   onToggleSelect?: (docId: number) => void;
   columnSpanning?: Record<string, boolean>; // Map of column ID to whether it spans two rows
+  columnStyles?: Record<string, string>; // Map of column ID to custom CSS string
 }
 
 /**
@@ -50,6 +52,7 @@ export function useTableColumns({
   onTogglePin,
   onToggleSelect,
   columnSpanning,
+  columnStyles,
 }: ColumnOptions) {
   return useMemo<ColumnDef<Document>[]>(() => {
     const allBaseColumns: Record<string, ColumnDef<Document>> = {
@@ -64,7 +67,7 @@ export function useTableColumns({
         cell: ({ row }) => {
           const doc = row.original;
           return (
-            <div className="flex items-start gap-2 min-w-0">
+            <div className="flex items-start gap-2 min-w-0" style={parseCssString(columnStyles?.['title'] || '')}>
               <FeatherFileText className="text-heading-3 font-heading-3 text-error-600 flex-shrink-0 mt-0.5" />
               <span className="text-body-bold font-body-bold text-default-font break-words whitespace-normal">
                 {doc.title || doc.original_file_name || `Document ${doc.id}`}
@@ -84,7 +87,7 @@ export function useTableColumns({
         cell: ({ row }) => {
           const doc = row.original;
           return (
-            <span className="whitespace-nowrap text-body font-body text-neutral-500">
+            <span className="whitespace-nowrap text-body font-body text-neutral-500" style={parseCssString(columnStyles?.['created'] || '')}>
               {formatDate(doc.created)}
             </span>
           );
@@ -101,7 +104,7 @@ export function useTableColumns({
         cell: ({ row }) => {
           const doc = row.original;
           return (
-            <span className="whitespace-nowrap text-body font-body text-neutral-500">
+            <span className="whitespace-nowrap text-body font-body text-neutral-500" style={parseCssString(columnStyles?.['added'] || '')}>
               {formatDate(doc.added)}
             </span>
           );
@@ -118,11 +121,11 @@ export function useTableColumns({
         cell: ({ row }) => {
           const doc = row.original;
           return doc.correspondent ? (
-            <span className="text-body font-body text-default-font">
+            <span className="text-body font-body text-default-font" style={parseCssString(columnStyles?.['correspondent'] || '')}>
               {getCorrespondentName(doc.correspondent)}
             </span>
           ) : (
-            <span className="text-body font-body text-subtext-color">—</span>
+            <span className="text-body font-body text-subtext-color" style={parseCssString(columnStyles?.['correspondent'] || '')}>—</span>
           );
         },
       },
@@ -137,11 +140,11 @@ export function useTableColumns({
         cell: ({ row }) => {
           const doc = row.original;
           return doc.archive_serial_number ? (
-            <span className="text-body font-body text-default-font">
+            <span className="text-body font-body text-default-font" style={parseCssString(columnStyles?.['asn'] || '')}>
               {doc.archive_serial_number}
             </span>
           ) : (
-            <span className="text-body font-body text-subtext-color">—</span>
+            <span className="text-body font-body text-subtext-color" style={parseCssString(columnStyles?.['asn'] || '')}>—</span>
           );
         },
       },
@@ -156,11 +159,11 @@ export function useTableColumns({
         cell: ({ row }) => {
           const doc = row.original;
           return doc.page_count !== undefined && doc.page_count !== null ? (
-            <span className="text-body font-body text-default-font">
+            <span className="text-body font-body text-default-font" style={parseCssString(columnStyles?.['page_count'] || '')}>
               {doc.page_count}
             </span>
           ) : (
-            <span className="text-body font-body text-subtext-color">—</span>
+            <span className="text-body font-body text-subtext-color" style={parseCssString(columnStyles?.['page_count'] || '')}>—</span>
           );
         },
       },
@@ -173,7 +176,7 @@ export function useTableColumns({
         minSize: builtInFieldWidths.get('fileSize') || 100,
         size: builtInFieldWidths.get('fileSize'),
         cell: () => (
-          <span className="whitespace-nowrap text-body font-body text-neutral-500">
+          <span className="whitespace-nowrap text-body font-body text-neutral-500" style={parseCssString(columnStyles?.['fileSize'] || '')}>
             —
           </span>
         ),
@@ -189,9 +192,9 @@ export function useTableColumns({
         cell: ({ row }) => {
           const doc = row.original;
           return doc.document_type ? (
-            <span className="text-body font-body text-default-font">{getDocumentTypeName(doc.document_type)}</span>
+            <span className="text-body font-body text-default-font" style={parseCssString(columnStyles?.['category'] || '')}>{getDocumentTypeName(doc.document_type)}</span>
           ) : (
-            <span className="text-body font-body text-subtext-color">—</span>
+            <span className="text-body font-body text-subtext-color" style={parseCssString(columnStyles?.['category'] || '')}>—</span>
           );
         },
       },
@@ -204,7 +207,7 @@ export function useTableColumns({
         minSize: builtInFieldWidths.get('owner') || 120,
         size: builtInFieldWidths.get('owner'),
         cell: () => (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" style={parseCssString(columnStyles?.['owner'] || '')}>
             <Avatar size="x-small">U</Avatar>
             <span className="whitespace-nowrap text-body font-body text-default-font">
               —
@@ -289,7 +292,7 @@ export function useTableColumns({
             cell: ({ row }) => {
               const doc = row.original;
               return (
-                <div className="flex items-start gap-2 min-w-0">
+                <div className="flex items-start gap-2 min-w-0" style={parseCssString(columnStyles?.['title'] || '')}>
                   <FeatherFileText className="text-heading-3 font-heading-3 text-error-600 flex-shrink-0 mt-0.5" />
                   <span className="text-body-bold font-body-bold text-default-font break-words whitespace-normal">
                     {doc.title || doc.original_file_name || `Document ${doc.id}`}
@@ -316,13 +319,14 @@ export function useTableColumns({
             },
             cell: ({ row }) => {
               const doc = row.original;
+              const styles = parseCssString(columnStyles?.['tags'] || '');
               if (!doc.tags || doc.tags.length === 0) {
-                return <span className="text-body font-body text-subtext-color">—</span>;
+                return <span className="text-body font-body text-subtext-color" style={styles}>—</span>;
               }
               // Use list display type for tags
               if (displayType === 'list') {
                 return (
-                  <div className="flex items-center gap-1 flex-wrap">
+                  <div className="flex items-center gap-1 flex-wrap" style={styles}>
                     {doc.tags.map((tagId) => (
                       <Badge key={tagId} variant="neutral">
                         {getTagName(tagId)}
@@ -332,7 +336,7 @@ export function useTableColumns({
                 );
               }
               // Fallback to text display
-              return <CustomFieldDisplay value={doc.tags.map((tagId: number) => getTagName(tagId)).join(', ')} displayType={displayType} />;
+              return <div style={styles}><CustomFieldDisplay value={doc.tags.map((tagId: number) => getTagName(tagId)).join(', ')} displayType={displayType} /></div>;
             },
           };
         }
@@ -352,11 +356,12 @@ export function useTableColumns({
           },
           cell: ({ row }) => {
             const value = getBuiltInFieldValue(row.original, fieldId);
+            const styles = parseCssString(columnStyles?.[fieldId] || '');
             if (value === null || value === undefined || value === '') {
-              return <span className="text-body font-body text-subtext-color">—</span>;
+              return <span className="text-body font-body text-subtext-color" style={styles}>—</span>;
             }
-            // Use CustomFieldDisplay for consistent rendering
-            return <CustomFieldDisplay value={value} displayType={displayType} />;
+            // Use CustomFieldDisplay for consistent rendering and wrap with style
+            return <div style={styles}><CustomFieldDisplay value={value} displayType={displayType} /></div>;
           },
         };
       }
@@ -411,7 +416,8 @@ export function useTableColumns({
             const resolvedValue = resolveCustomFieldValue(rawValue, field);
             // Force Status field to display as text instead of list/badges
             const effectiveDisplayType = field.name.toLowerCase() === 'status' ? 'text' : displayType;
-            return <CustomFieldDisplay value={resolvedValue} displayType={effectiveDisplayType} />;
+            const styles = parseCssString(columnStyles?.[columnId] || '');
+            return <div style={styles}><CustomFieldDisplay value={resolvedValue} displayType={effectiveDisplayType} /></div>;
           },
         };
       }
@@ -468,6 +474,6 @@ export function useTableColumns({
     };
 
     return [pinSelectColumn, ...baseColumns, ...customFieldColumns];
-  }, [documentTypes, visibleCustomFieldColumns, enabledBuiltInFields, builtInFieldWidths, getDocumentTypeName, getTagName, getCorrespondentName, pinnedDocuments, selectedDocuments, onTogglePin, onToggleSelect, columnSpanning]);
+  }, [documentTypes, visibleCustomFieldColumns, enabledBuiltInFields, builtInFieldWidths, getDocumentTypeName, getTagName, getCorrespondentName, pinnedDocuments, selectedDocuments, onTogglePin, onToggleSelect, columnSpanning, columnStyles]);
 }
 

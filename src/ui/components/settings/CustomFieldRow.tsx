@@ -6,7 +6,7 @@ import { Switch } from "../Switch";
 import { Button } from "../Button";
 import { TextField } from "../TextField";
 import { DropdownMenu } from "../DropdownMenu";
-import { FeatherChevronDown, FeatherGripVertical, FeatherStar } from "@subframe/core";
+import { FeatherChevronDown, FeatherGripVertical, FeatherStar, FeatherCode } from "@subframe/core";
 import * as SubframeCore from "@subframe/core";
 import { CustomField, DATA_TYPE_LABELS } from "@/app/data/custom-field";
 import { SETTINGS_KEYS } from "@/app/data/ui-settings";
@@ -19,6 +19,7 @@ import {
   getDefaultEditModeEntryType,
 } from "./customFieldHelpers";
 import { BuiltInField } from "./builtInFields";
+import { CustomCssModal } from "./CustomCssModal";
 
 type DisplayableField = (CustomField & { isBuiltIn: false }) | (BuiltInField & { isBuiltIn: true });
 
@@ -63,6 +64,7 @@ export function CustomFieldRow({
   const columnWidthKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `general-settings:documents:built-in-field:column-width:${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_COLUMN_WIDTH_PREFIX}${fieldId}`;
   const editModeKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_EDIT_MODE_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_PREFIX}${fieldId}`;
   const editModeEntryTypeKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX}${fieldId}`;
+  const customCssKey = isBuiltIn ? (fieldId && typeof fieldId === 'string' ? `${SETTINGS_KEYS.BUILT_IN_FIELD_STYLE_PREFIX}${fieldId}` : '') : `${SETTINGS_KEYS.CUSTOM_FIELD_STYLE_PREFIX}${fieldId}`;
 
   const dataTypeLabel = DATA_TYPE_LABELS.find(
     (dt) => dt.id === field.data_type
@@ -99,6 +101,7 @@ export function CustomFieldRow({
   const [localEditModeEnabled, setLocalEditModeEnabled] = useState(() =>
     isBuiltIn ? false : getSetting(editModeKey!, false)
   );
+  const [isCssModalOpen, setIsCssModalOpen] = useState(false);
 
   // Sync local state with settings when they change externally
   // Use the actual setting value as dependency to avoid unnecessary re-runs
@@ -147,6 +150,7 @@ export function CustomFieldRow({
     : null;
   const currentTableDisplayType = tableDisplayTypeKey ? getSetting(tableDisplayTypeKey, getDefaultTableDisplayType(field.data_type)) : getDefaultTableDisplayType(field.data_type);
   const currentEditModeEntryType = editModeEntryTypeKey ? getSetting(editModeEntryTypeKey, getDefaultEditModeEntryType(field.data_type)) : null;
+  const currentCustomCss = customCssKey ? getSetting(customCssKey, '') : '';
 
   // Get column width - handle both string and number types from settings
   const columnWidthRaw = getSetting(columnWidthKey, '');
@@ -421,6 +425,28 @@ export function CustomFieldRow({
             </TextField>
           ) : (
             <span className="text-body font-body text-subtext-color">—</span>
+          )}
+        </div>
+      </Table.Cell>
+      <Table.Cell>
+        <div className="flex items-center justify-center">
+          <Button
+            variant={currentCustomCss ? "brand-secondary" : "neutral-secondary"}
+            size="small"
+            icon={currentCustomCss ? <FeatherCode className="text-brand-600" /> : <FeatherCode />}
+            onClick={() => setIsCssModalOpen(true)}
+            className={currentCustomCss ? "border-brand-200 bg-brand-50" : ""}
+          >
+            {currentCustomCss ? "Edit CSS" : "Add CSS"}
+          </Button>
+          {isCssModalOpen && (
+            <CustomCssModal
+              isOpen={isCssModalOpen}
+              onClose={() => setIsCssModalOpen(false)}
+              onSave={(css) => updateSetting(customCssKey, css)}
+              initialCss={currentCustomCss}
+              fieldName={field.name}
+            />
           )}
         </div>
       </Table.Cell>

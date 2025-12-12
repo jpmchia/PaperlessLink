@@ -22,7 +22,8 @@ const DEFAULT_CONFIG: TableConfig = {
     columnSpanning: {},
     subrowEnabled: false,
     subrowContent: 'summary',
-    sorting: []
+    sorting: [],
+    columnStyles: {}
 };
 
 const STORAGE_KEY_ACTIVE_VIEW = 'paperless_active_view_id';
@@ -96,6 +97,7 @@ export function useActiveView() {
                 subrowContent: activeView.subrow_content,
                 // normalize sorting if needed, activeView usually has single sort_field
                 sorting: activeView.sort_field ? [{ id: activeView.sort_field, desc: !!activeView.sort_reverse }] : [],
+                columnStyles: activeView.column_styles || {},
             };
         }
 
@@ -110,6 +112,7 @@ export function useActiveView() {
             filterTypes: { ...base.filterTypes, ...(unsavedChanges.filterTypes || {}) },
             editModeSettings: { ...base.editModeSettings, ...(unsavedChanges.editModeSettings || {}) },
             columnSpanning: { ...base.columnSpanning, ...(unsavedChanges.columnSpanning || {}) },
+            columnStyles: { ...base.columnStyles, ...(unsavedChanges.columnStyles || {}) },
         };
     }, [activeView, unsavedChanges]);
 
@@ -186,6 +189,13 @@ export function useActiveView() {
         }));
     }, []);
 
+    const updateColumnStyles = useCallback((styles: Record<string, string>) => {
+        setUnsavedChanges(prev => ({
+            ...prev,
+            columnStyles: { ...(prev.columnStyles || {}), ...styles }
+        }));
+    }, []);
+
     // 6b. Metadata Update Handlers
     const updateViewName = useCallback((name: string) => {
         setUnsavedMetadataChanges(prev => ({ ...prev, name }));
@@ -212,6 +222,7 @@ export function useActiveView() {
         filterTypes?: Record<string, string>;
         editModeSettings?: Record<string, { enabled: boolean; entry_type?: string }>;
         columnSpanning?: Record<string, boolean>;
+        columnStyles?: Record<string, string>;
         name?: string;
         description?: string;
         is_global?: boolean;
@@ -246,6 +257,7 @@ export function useActiveView() {
                 edit_mode_settings: configToSave.editModeSettings,
                 // Spanning configuration
                 column_spanning: configToSave.columnSpanning,
+                column_styles: configToSave.columnStyles,
                 // Subrow configuration (from tableConfig if not in completeConfig)
                 subrow_enabled: tableConfig.subrowEnabled,
                 subrow_content: tableConfig.subrowContent,
@@ -277,6 +289,7 @@ export function useActiveView() {
                 filter_types: tableConfig.filterTypes,
                 edit_mode_settings: tableConfig.editModeSettings,
                 column_spanning: tableConfig.columnSpanning,
+                column_styles: tableConfig.columnStyles,
                 subrow_enabled: tableConfig.subrowEnabled,
                 subrow_content: tableConfig.subrowContent,
             };
@@ -319,6 +332,7 @@ export function useActiveView() {
         updateColumnSpanning,
         updateSorting,
         updateColumnDisplayTypes,
+        updateColumnStyles,
         updateViewName,
         updateViewDescription,
         updateViewIsGlobal,

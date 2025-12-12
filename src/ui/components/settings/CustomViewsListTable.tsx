@@ -34,8 +34,19 @@ export function CustomViewsListTable({
   onDelete,
   onDuplicate,
 }: CustomViewsListTableProps) {
+  // Debug logging
+  React.useEffect(() => {
+    console.log('[CustomViewsListTable] Received customViews:', customViews);
+    console.log('[CustomViewsListTable] Number of views:', customViews?.length || 0);
+  }, [customViews]);
+
   // Filter out drafts (they have string IDs starting with "draft-")
-  const savedViews = customViews.filter(v => typeof v.id === 'number');
+  const savedViews = (customViews || []).filter(v => v && typeof v.id === 'number');
+  
+  React.useEffect(() => {
+    console.log('[CustomViewsListTable] Saved views after filtering:', savedViews);
+    console.log('[CustomViewsListTable] Number of saved views:', savedViews.length);
+  }, [savedViews]);
 
   if (savedViews.length === 0) {
     return (

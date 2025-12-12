@@ -108,6 +108,8 @@ export const SETTINGS_KEYS = {
   BUILT_IN_FIELD_EDIT_MODE_PREFIX: 'general-settings:documents:built-in-field:edit-mode:',
   BUILT_IN_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX: 'general-settings:documents:built-in-field:edit-mode-entry-type:',
   BUILT_IN_FIELD_TAB_PREFIX: 'general-settings:documents:built-in-field:tab:',
+  CUSTOM_FIELD_STYLE_PREFIX: 'general-settings:documents:custom-field:style:',
+  BUILT_IN_FIELD_STYLE_PREFIX: 'general-settings:documents:built-in-field:style:',
 }
 
 export const SETTINGS: UiSetting[] = [

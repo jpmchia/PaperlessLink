@@ -160,12 +160,15 @@ class ApiClient {
         const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown'
         const corsError = new Error(
           `Failed to fetch from ${url.toString()}. ` +
-          `This is likely a CORS issue. ` +
-          `Make sure ${origin} is added to PAPERLESS_CORS_ALLOWED_HOSTS on the backend. ` +
+          `This is likely a CORS issue or the backend service is unavailable. ` +
+          `Make sure ${origin} is added to PAPERLESS_CORS_ALLOWED_HOSTS on the backend, ` +
+          `and that the backend service is running and accessible. ` +
           `Original error: ${error.message}`
         )
         ;(corsError as any).originalError = error
         ;(corsError as any).isCorsError = true
+        ;(corsError as any).url = url.toString()
+        ;(corsError as any).isNetworkError = true
         console.error('CORS or network error:', {
           url: url.toString(),
           origin,
@@ -174,7 +177,20 @@ class ApiClient {
         })
         throw corsError
       }
-      console.error('API request failed:', error)
+      
+      // Enhance error with URL information for better debugging
+      if (error instanceof Error) {
+        ;(error as any).url = url.toString()
+        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          ;(error as any).isNetworkError = true
+        }
+      }
+      
+      console.error('API request failed:', {
+        error,
+        url: url.toString(),
+        method,
+      })
       throw error
     }
   }

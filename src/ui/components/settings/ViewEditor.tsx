@@ -32,6 +32,7 @@ export function ViewEditor({ customFields, customFieldsLoading, onClose }: ViewE
         updateColumnSizing,
         updateColumnSpanning,
         updateColumnDisplayTypes,
+        updateColumnStyles,
         updateFilterVisibility,
         updateFilterTypes,
         updateEditModeSettings,
@@ -146,6 +147,16 @@ export function ViewEditor({ customFields, customFieldsLoading, onClose }: ViewE
         if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX)) {
             const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_EDIT_MODE_ENTRY_TYPE_PREFIX, '');
             return tableConfig.editModeSettings?.[fieldId]?.entry_type || defaultValue;
+        }
+
+        // Custom Styles
+        if (key.startsWith(SETTINGS_KEYS.CUSTOM_FIELD_STYLE_PREFIX)) {
+            const fieldId = key.replace(SETTINGS_KEYS.CUSTOM_FIELD_STYLE_PREFIX, '');
+            return tableConfig.columnStyles?.[`customField_${fieldId}`] || defaultValue;
+        }
+        if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_STYLE_PREFIX)) {
+            const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_STYLE_PREFIX, '');
+            return tableConfig.columnStyles?.[fieldId] || defaultValue;
         }
 
         // For everything else, return default (Global fallback is handled elsewhere or not critical for visual editor)
@@ -330,6 +341,18 @@ export function ViewEditor({ customFields, customFieldsLoading, onClose }: ViewE
             return;
         }
 
+        // Custom Styles
+        if (key.startsWith(SETTINGS_KEYS.CUSTOM_FIELD_STYLE_PREFIX)) {
+            const fieldId = key.replace(SETTINGS_KEYS.CUSTOM_FIELD_STYLE_PREFIX, '');
+            updateColumnStyles({ ...tableConfig.columnStyles, [`customField_${fieldId}`]: value });
+            return;
+        }
+        if (key.startsWith(SETTINGS_KEYS.BUILT_IN_FIELD_STYLE_PREFIX)) {
+            const fieldId = key.replace(SETTINGS_KEYS.BUILT_IN_FIELD_STYLE_PREFIX, '');
+            updateColumnStyles({ ...tableConfig.columnStyles, [fieldId]: value });
+            return;
+        }
+
         // Ignore other keys for now or log warning
         console.warn(`[ViewEditor] Unhandled setting key: ${key}`);
 
@@ -365,6 +388,7 @@ export function ViewEditor({ customFields, customFieldsLoading, onClose }: ViewE
         const filterVisibility: Record<string, boolean> = {};
         const filterTypes: Record<string, string> = {};
         const columnSpanning: Record<string, boolean> = {};
+        const columnStyles: Record<string, string> = {};
         const editModeSettings: Record<string, { enabled: boolean; entry_type?: string }> = {};
 
         allFieldIds.forEach(({ id, isBuiltIn, dataType }) => {
@@ -438,6 +462,15 @@ export function ViewEditor({ customFields, customFieldsLoading, onClose }: ViewE
                 enabled: editModeEnabled,
                 entry_type: editEntryType
             };
+
+            // Styles
+            const styleKey = isBuiltIn
+                ? `${SETTINGS_KEYS.BUILT_IN_FIELD_STYLE_PREFIX}${id}`
+                : `${SETTINGS_KEYS.CUSTOM_FIELD_STYLE_PREFIX}${id}`;
+            const styles = getSetting(styleKey, '');
+            if (styles) {
+                columnStyles[fieldKey] = styles;
+            }
         });
 
         // Pass the complete config directly to saveCurrentView (no need for state updates)
@@ -449,6 +482,7 @@ export function ViewEditor({ customFields, customFieldsLoading, onClose }: ViewE
             filterVisibility,
             filterTypes,
             columnSpanning,
+            columnStyles,
             editModeSettings,
             name: viewMetadata.name,
             description: viewMetadata.description,
