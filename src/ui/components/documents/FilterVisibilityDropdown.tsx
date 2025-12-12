@@ -19,10 +19,13 @@ interface FilterVisibilityDropdownProps {
   appliedCustomView?: CustomView | null;
   settings?: UiSettings | null;
   onCustomFieldVisibilityChange?: (fieldId: number, visible: boolean) => void;
+  pendingFilterVisibility?: Record<string, boolean> | null;
 }
 
-const FILTER_LABELS: Record<keyof FilterVisibility, string> = {
+const FILTER_LABELS: Record<string, string> = {
   dateRange: "Created Date",
+  created: "Created Date",
+  added: "Added Date",
   category: "Document type",
   correspondent: "Correspondent",
   tags: "Tags",
@@ -30,6 +33,9 @@ const FILTER_LABELS: Record<keyof FilterVisibility, string> = {
   owner: "Owner",
   status: "Status",
   asn: "ASN",
+  title: "Title",
+  page_count: "Pages",
+  fileSize: "File Size",
 };
 
 export function FilterVisibilityDropdown({
@@ -39,37 +45,42 @@ export function FilterVisibilityDropdown({
   appliedCustomView,
   settings,
   onCustomFieldVisibilityChange,
+  pendingFilterVisibility,
 }: FilterVisibilityDropdownProps) {
   const filterKeys = Object.keys(filterVisibility) as Array<keyof FilterVisibility>;
   
-  // Get custom field filter visibility
+  // Get custom field filter visibility from tableConfig (pendingFilterVisibility)
+  // This includes both the active view state and any unsaved changes
   const customFieldVisibility = useMemo(() => {
     const visibility: Record<number, boolean> = {};
     
-    if (!appliedCustomView || !customFields.length) return visibility;
+    if (!customFields.length) return visibility;
+    
+    // Use pendingFilterVisibility (tableConfig.filterVisibility) which has the current state
+    const currentFilterVisibility = pendingFilterVisibility || {};
     
     customFields.forEach((field) => {
       if (!field.id) return;
       
+      // Try multiple key formats to match how it might be stored
       const filterKey = `${SETTINGS_KEYS.CUSTOM_FIELD_FILTER_PREFIX}${field.id}`;
       const filterVisibilityKey1 = `customField_${field.id}`;
       const filterVisibilityKey2 = String(field.id);
       
-      // Check filter_visibility object first, then fall back to settings
-      const isFilterVisibleFromView = appliedCustomView.filter_visibility?.[filterKey] ||
-                                     appliedCustomView.filter_visibility?.[filterVisibilityKey1] ||
-                                     appliedCustomView.filter_visibility?.[filterVisibilityKey2] ||
-                                     false;
+      // Check current filter visibility state (from tableConfig)
+      const isVisible = currentFilterVisibility[filterKey] !== undefined
+        ? currentFilterVisibility[filterKey]
+        : currentFilterVisibility[filterVisibilityKey1] !== undefined
+        ? currentFilterVisibility[filterVisibilityKey1]
+        : currentFilterVisibility[filterVisibilityKey2] !== undefined
+        ? currentFilterVisibility[filterVisibilityKey2]
+        : false;
       
-      // Also check global settings as fallback
-      const settingsObj = settings?.settings as Record<string, any> | undefined;
-      const isFilterVisibleFromSettings = settingsObj?.[filterKey] || false;
-      
-      visibility[field.id] = isFilterVisibleFromView || isFilterVisibleFromSettings;
+      visibility[field.id] = isVisible;
     });
     
     return visibility;
-  }, [customFields, appliedCustomView, settings]);
+  }, [customFields, pendingFilterVisibility]);
   
   // Count how many filters are visible (built-in + custom)
   const builtInVisibleCount = filterKeys.filter(key => filterVisibility[key]).length;
@@ -100,7 +111,7 @@ export function FilterVisibilityDropdown({
             {/* Built-in filters */}
             {filterKeys.map((key) => {
               const isVisible = filterVisibility[key];
-              const label = FILTER_LABELS[key];
+              const label = FILTER_LABELS[key] || key;
 
               return (
                 <div
@@ -122,8 +133,8 @@ export function FilterVisibilityDropdown({
               );
             })}
             
-            {/* Custom field filters */}
-            {appliedCustomView && customFields.length > 0 && (
+            {/* Custom field filters - show for all views, not just custom views */}
+            {customFields.length > 0 && (
               <>
                 {filterKeys.length > 0 && (
                   <div className="h-px bg-neutral-border my-1" />

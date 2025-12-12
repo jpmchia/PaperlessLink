@@ -94,18 +94,17 @@ export function DocumentsCustomViewHeader({
           appliedCustomView={appliedCustomView}
           settings={settings}
           onCustomFieldVisibilityChange={onCustomFieldFilterVisibilityChange}
+          pendingFilterVisibility={pendingFilterVisibility}
         />
         
-        {/* Column Visibility/Order Dropdown - only show when a custom view is selected */}
-        {appliedCustomView && selectedCustomViewId && typeof selectedCustomViewId === 'number' && (
-          <ColumnVisibilityDropdown
-            columnOrder={columnOrder}
-            columnVisibility={columnVisibility}
-            onOrderChange={onColumnOrderChange}
-            onVisibilityChange={onColumnVisibilityChange}
-            customFields={customFields}
-          />
-        )}
+        {/* Column Visibility/Order Dropdown - show for all views */}
+        <ColumnVisibilityDropdown
+          columnOrder={columnOrder}
+          columnVisibility={columnVisibility}
+          onOrderChange={onColumnOrderChange}
+          onVisibilityChange={onColumnVisibilityChange}
+          customFields={customFields}
+        />
         
         {/* Custom View Selector */}
         <CustomViewSelector

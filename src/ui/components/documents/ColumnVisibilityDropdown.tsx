@@ -131,6 +131,17 @@ export function ColumnVisibilityDropdown({
     setDraggedColumnId(null);
   };
 
+  // Count visible columns
+  const visibleCount = useMemo(() => {
+    return orderedColumns.filter((column) => {
+      const visibilityKey = column.isBuiltIn 
+        ? String(column.id) 
+        : `customField_${column.id}`;
+      return columnVisibility[visibilityKey] !== undefined
+        ? columnVisibility[visibilityKey] !== false
+        : column.isBuiltIn;
+    }).length;
+  }, [orderedColumns, columnVisibility]);
 
   return (
     <SubframeCore.DropdownMenu.Root>
@@ -141,7 +152,7 @@ export function ColumnVisibilityDropdown({
           icon={<FeatherColumns />}
           iconRight={<FeatherChevronDown />}
         >
-          Columns
+          Columns {visibleCount > 0 && `(${visibleCount})`}
         </Button>
       </SubframeCore.DropdownMenu.Trigger>
       <SubframeCore.DropdownMenu.Portal>
@@ -158,7 +169,10 @@ export function ColumnVisibilityDropdown({
               const visibilityKey = column.isBuiltIn 
                 ? String(column.id) 
                 : `customField_${column.id}`;
-              const isVisible = columnVisibility[visibilityKey] !== false;
+              // Explicitly check visibility - if not in map, default to visible for built-in, false for custom
+              const isVisible = columnVisibility[visibilityKey] !== undefined
+                ? columnVisibility[visibilityKey] !== false
+                : column.isBuiltIn; // Default: built-in fields visible, custom fields hidden
               const isDragging = draggedColumnId === column.id;
 
               return (
