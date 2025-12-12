@@ -16,11 +16,12 @@ const nextConfig = {
   allowedDevOrigins: [
     'http://192.168.0.66:3000',
     'http://192.168.1.51:3000',
+    'http://192.168.0.51:3000',
     'http://192.168.1.51:8001',
-    'http://192.168.1.51', // Add without port for cross-origin requests
+    'http://192.168.0.51', // Add without port for cross-origin requests
     'http://192.168.0.66', // Add without port for cross-origin requests
     '192.168.1.51:3000', // Try without protocol
-    '192.168.1.51', // Try IP only
+    '192.168.0.51:3000', // Try IP only
     '192.168.0.66:3000', // Try without protocol
     '192.168.0.66', // Try IP only
   ],

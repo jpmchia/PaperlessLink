@@ -102,10 +102,11 @@ export function CustomFieldsTab({ onClose }: CustomFieldsTabProps) {
     if (!view.id) return;
     if (confirm(`Are you sure you want to delete "${view.name}"?`)) {
       try {
+        await deleteView(view.id);
+        // Only deselect the view after successful deletion
         if (activeViewId === view.id) {
           setActiveViewId(null);
         }
-        await deleteView(view.id);
       } catch (e: any) {
         console.error("[CustomFieldsTab] Failed to delete view", e);
         const errorInfo = detectError(e);
@@ -184,19 +185,26 @@ export function CustomFieldsTab({ onClose }: CustomFieldsTabProps) {
               Loading custom views...
             </span>
           </div>
-        ) : errorInfo && (errorInfo.type === 'backend-unavailable' || errorInfo.type === 'network') ? (
+        ) : errorInfo ? (
+          // Show error state for ALL error types, not just network/backend-unavailable
           <div className="flex flex-col items-center justify-center py-8 gap-2">
             <span className="text-body font-body text-subtext-color text-center">
-              Unable to load custom views. Please check that the Paperless Link Service is running and accessible.
+              {errorInfo.type === 'backend-unavailable' || errorInfo.type === 'network'
+                ? 'Unable to load custom views. Please check that the Paperless Link Service is running and accessible.'
+                : errorInfo.userMessage}
             </span>
-            <Button
-              variant="neutral-tertiary"
-              size="small"
-              icon={<FeatherRefreshCw />}
-              onClick={() => refetchCustomViews()}
-            >
-              Retry Connection
-            </Button>
+            {errorInfo.actionable && (
+              <Button
+                variant="neutral-tertiary"
+                size="small"
+                icon={<FeatherRefreshCw />}
+                onClick={() => refetchCustomViews()}
+              >
+                {errorInfo.type === 'backend-unavailable' || errorInfo.type === 'network'
+                  ? 'Retry Connection'
+                  : 'Retry'}
+              </Button>
+            )}
           </div>
         ) : (
           <CustomViewsListTable
